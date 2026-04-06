@@ -1,4 +1,4 @@
-name: Build_IPA
+name: Build_Simple_IPA
 on: [push, workflow_dispatch]
 jobs:
   build:
@@ -8,46 +8,15 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-
-      - name: Hard Force iOS 13
+      
+      - name: Build
         run: |
           flutter pub get
-          rm -rf ios
-          flutter create . --platforms=ios
-          
-          cd ios
-          # Создаем идеальный Podfile с нуля
-          cat <<EOF > Podfile
-          platform :ios, '13.0'
-          use_frameworks!
-          
-          target 'Runner' do
-            use_frameworks!
-            use_modular_headers!
-            flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
-          end
-          
-          post_install do |installer|
-            installer.pods_project.targets.each do |target|
-              flutter_additional_ios_build_settings(target)
-              target.build_configurations.each do |config|
-                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
-                config.build_settings['ENABLE_BITCODE'] = 'NO'
-              end
-            end
-          end
-          EOF
-          
-          pod install || true
-          cd ..
-
-      - name: Build IPA
-        run: |
-          # Прямая сборка через xcodebuild (самый надежный способ)
+          # Мы НЕ запускаем установку подов, а сразу просим собрать проект
           flutter build ios --release --no-codesign
           
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: my_app_ipa
+          name: app_file
           path: build/ios/iphoneos/*.app
