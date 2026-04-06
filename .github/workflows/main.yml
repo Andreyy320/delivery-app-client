@@ -4,15 +4,14 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          flutter-version: '3.22.2' # Ставим стабильную версию
       - run: flutter pub get
       - run: flutter build ios --release --no-codesign
       - name: Upload
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: my_app_ipa
           path: build/ios/iphoneos/*.app
