@@ -1,11 +1,11 @@
 name: Deploy_To_Web
 on:
   push:
-    branches: [ main ] # или master, смотря какая у тебя главная
+    branches: [ main ] # Проверь, что ветка называется main, а не master
 
 jobs:
   build:
-    runs-on: ubuntu-latest # Веб собирается на дешевеньком Linux, это быстро
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -15,11 +15,11 @@ jobs:
       - name: Build Web
         run: |
           flutter pub get
-          # Собираем веб-версию с использованием HTML рендерера (лучше для мобилок)
-          flutter build web --release --web-renderer html --base-href /${{ github.event.repository.name }}/
+          # Самая простая команда сборки без лишних флагов
+          flutter build web --release --base-href /${{ github.event.repository.name }}/
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: build/web # Папка, которую нужно опубликовать
-          branch: gh-pages # Ветка, где будет лежать сайт
+          folder: build/web
+          branch: gh-pages
