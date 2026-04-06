@@ -1,4 +1,4 @@
-name: Build_IPA
+name: Build_IPA_Final
 on: [push, workflow_dispatch]
 jobs:
   build:
@@ -9,22 +9,35 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Just Build It
+      - name: Total Clean and Force iOS 13
         run: |
+          # 1. Чистим всё
           flutter pub get
-          
-          # Сносим старое, создаем чистое (как хочет Flutter)
           rm -rf ios
           flutter create . --platforms=ios
           
-          # ПУБЛИЧНОЕ ИСПРАВЛЕНИЕ:
-          # Просто меняем 10.0 на 13.0 во всех файлах, которые только что создались
-          sed -i '' 's/10.0/13.0/g' ios/Runner.xcodeproj/project.pbxproj
+          # 2. ЖЕСТКИЙ ФИКС: Меняем 10.0 на 13.0 везде, включая скрытые настройки Xcode
+          # Это уберет ту самую ошибку "-G"
+          find ios -type f \( -name "*.pbxproj" -o -name "*.xcconfig" -o -name "Podfile" \) -exec sed -i '' 's/10.0/13.0/g' {} +
           
-          # Запускаем сборку. Flutter сам создаст нужный Podfile и сам всё скачает.
-          flutter build ios --release --no-codesign
+          # 3. Настройка Podfile для всех зависимостей (Firebase и прочее)
+          cd ios
+          echo "post_install do |installer|
+            installer.pods_project.targets.each do |target|
+              flutter_additional_ios_build_settings(target)
+              target.build_configurations.each do |config|
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+              end
+            end
+          end" >> Podfile
           
-      - name: Upload
+          pod install || true
+          cd ..
+
+      - name: Build
+        run: flutter build ios --release --no-codesign
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: app_ready
