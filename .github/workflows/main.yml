@@ -8,20 +8,20 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-      
-      - name: Repair iOS folder
+
+      - name: Reconstruct iOS folder
         run: |
+          # Эта команда создаст недостающие файлы ios, если их нет
+          flutter create . --platforms=ios
           flutter pub get
           cd ios
-          rm -rf Pods
-          rm -rf Podfile.lock
-          rm -rf .symlinks
-          rm -rf Flutter/Flutter.podspec
-          pod repo update
-          
+          # Удаляем старый Podfile, чтобы Flutter создал новый и правильный
+          rm -f Podfile
+          pod install || true
+
       - name: Build IPA
         run: flutter build ios --release --no-codesign
-        
+
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
