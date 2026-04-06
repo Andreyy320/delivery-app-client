@@ -1,4 +1,4 @@
-name: Build_IPA_Final_v2
+name: Build_IPA_Final_v3
 on: [push, workflow_dispatch]
 jobs:
   build:
@@ -9,24 +9,26 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Inject Version Fix
+      - name: Kill Error G and Build
         run: |
           flutter pub get
           rm -rf ios
           flutter create . --platforms=ios
           
-          # 1. Сначала меняем версию в самом проекте Xcode
+          # 1. Меняем версию на 13.0 везде
           find ios -type f -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} +
           
-          # 2. УМНАЯ ЗАМЕНА В Podfile:
-          # Мы находим стандартный flutter_additional_ios_build_settings(target) 
-          # и сразу после него вставляем принудительную установку версии 13.0
+          # 2. УДАЛЯЕМ флаг -G, который бесит Xcode
+          find ios -type f -name "*.pbxproj" -exec sed -i '' 's/-G//g' {} +
+          
+          # 3. Умная вставка версии в Podfile
           sed -i '' '/flutter_additional_ios_build_settings(target)/a \
                 target.build_configurations.each do |config| \
                   config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "13.0" \
+                  config.build_settings["GCC_ GENERIC_VALUE_PROPAGATION"] = "NO" \
                 end' ios/Podfile
 
-          # 3. Запускаем сборку
+          # 4. Собираем
           flutter build ios --release --no-codesign
           
       - name: Upload
