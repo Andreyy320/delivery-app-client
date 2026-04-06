@@ -1,26 +1,25 @@
-name: Build_IPA_Simple
-on: [push, workflow_dispatch]
+name: Deploy_To_Web
+on:
+  push:
+    branches: [ main ] # или master, смотря какая у тебя главная
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: ubuntu-latest # Веб собирается на дешевеньком Linux, это быстро
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
-      - name: Build
+      - name: Build Web
         run: |
           flutter pub get
-          # Фикс версии, чтобы Xcode не ругался на -G
-          find ios -name "*.pbxproj" -exec sed -i '' 's/10.0/13.0/g' {} +
-          
-          # Сборка без проверок подписи
-          flutter build ios --release --no-codesign
+          # Собираем веб-версию с использованием HTML рендерера (лучше для мобилок)
+          flutter build web --release --web-renderer html --base-href /${{ github.event.repository.name }}/
 
-      - name: Upload
-        uses: actions/upload-artifact@v4
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
-          name: app_ready
-          path: build/ios/iphoneos/*.app
+          folder: build/web # Папка, которую нужно опубликовать
+          branch: gh-pages # Ветка, где будет лежать сайт
