@@ -1,40 +1,29 @@
-name: Build_IPA_Final_v5
+name: Flutter_iOS_Build_Simple
 on: [push, workflow_dispatch]
+
 jobs:
   build:
-    runs-on: macos-latest
+    # ИСПОЛЬЗУЕМ СТАБИЛЬНУЮ ВЕРСИЮ (MacOS 13 + Xcode 14/15)
+    runs-on: macos-13
+    
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-
-      - name: Upgrade and Clean Build
+          
+      - name: Install Dependencies
         run: |
-          # 1. Обновляем зависимости до последних совместимых
-          flutter pub upgrade
-          
-          # 2. Полная пересборка iOS части
-          rm -rf ios
-          flutter create . --platforms=ios
-          
-          # 3. Принудительно вырезаем флаг -G из ВСЕХ файлов проекта
-          # Мы пройдемся по каждому файлу в папке ios
-          grep -rli ' "-G"' ios | xargs -I@ sed -i '' 's/ "-G"//g' @ || true
-          
-          # 4. Фикс версии и подавление ошибок в Podfile
-          sed -i '' '/flutter_additional_ios_build_settings(target)/a \
-                target.build_configurations.each do |config| \
-                  config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "13.0" \
-                  config.build_settings["OTHER_CFLAGS"] = "-Wno-invalid-command-line-argument" \
-                  config.build_settings["GCC_GENERATE_DEBUGGING_SYMBOLS"] = "NO" \
-                end' ios/Podfile
+          flutter pub get
+          cd ios && pod install && cd ..
 
-          # 5. Сборка с явным указанием архитектуры
-          flutter build ios --release --no-codesign --build-name=1.0.0 --build-number=1
-          
-      - name: Upload
+      - name: Build iOS App
+        run: flutter build ios --release --no-codesign
+        
+      - name: Save App Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app_ready
+          name: ios-app-debug
           path: build/ios/iphoneos/*.app
