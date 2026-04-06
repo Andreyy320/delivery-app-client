@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:untitled1/screens/electroniki/Electronika_menu.dart';
 import 'package:untitled1/screens/electroniki/tirElKom.dart';
 import '../../models/dish_model.dart';
 import '../../shops/shop.dart';
