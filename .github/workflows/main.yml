@@ -9,47 +9,23 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Surgical Fix and Build
+      - name: Just Build It
         run: |
           flutter pub get
+          
+          # Сносим старое, создаем чистое (как хочет Flutter)
           rm -rf ios
           flutter create . --platforms=ios
           
-          # У заходим в папку ios
-          cd ios
+          # ПУБЛИЧНОЕ ИСПРАВЛЕНИЕ:
+          # Просто меняем 10.0 на 13.0 во всех файлах, которые только что создались
+          sed -i '' 's/10.0/13.0/g' ios/Runner.xcodeproj/project.pbxproj
           
-          # ПЕРЕЗАПИСЫВАЕМ Podfile полностью на рабочий вариант
-          cat <<EOF > Podfile
-          platform :ios, '13.0'
+          # Запускаем сборку. Flutter сам создаст нужный Podfile и сам всё скачает.
+          flutter build ios --release --no-codesign
           
-          # Это магическая строчка, которая связывает Flutter и Pods
-          load File.join(File.dirname(File.realpath(__FILE__)), 'Flutter', 'podhelper.rb')
-          
-          target 'Runner' do
-            use_frameworks!
-            use_modular_headers!
-            flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
-          end
-          
-          post_install do |installer|
-            installer.pods_project.targets.each do |target|
-              flutter_additional_ios_build_settings(target)
-              target.build_configurations.each do |config|
-                # Вот тут мы убиваем ошибку -G наповал
-                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
-              end
-            end
-          end
-          EOF
-          
-          pod install
-          cd ..
-          
-      - name: Build IPA
-        run: flutter build ios --release --no-codesign
-
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: app_bundle
+          name: app_ready
           path: build/ios/iphoneos/*.app
