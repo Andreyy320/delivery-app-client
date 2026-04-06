@@ -1,4 +1,4 @@
-name: Build_IPA_Final_v4
+name: Build_IPA_Force
 on: [push, workflow_dispatch]
 jobs:
   build:
@@ -9,28 +9,27 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Force Build Without Debug G
+      - name: Hard Force Build
         run: |
           flutter pub get
           rm -rf ios
           flutter create . --platforms=ios
           
-          # 1. Снова фиксим версию (это мы уже умеем)
+          # 1. Смена версии на 13.0
           find ios -type f -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} +
           
-          # 2. Инъекция в Podfile для отключения проблемных флагов
+          # 2. Инъекция флагов игнорирования в Podfile
+          # Мы заставляем компилятор молчать об ошибках в аргументах
           sed -i '' '/flutter_additional_ios_build_settings(target)/a \
                 target.build_configurations.each do |config| \
                   config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "13.0" \
+                  config.build_settings["OTHER_CFLAGS"] = "-Wno-invalid-command-line-argument" \
+                  config.build_settings["OTHER_LDFLAGS"] = "-Wno-invalid-command-line-argument" \
                   config.build_settings["GCC_GENERATE_DEBUGGING_SYMBOLS"] = "NO" \
-                  config.build_settings["COMPILER_INDEX_STORE_ENABLE"] = "NO" \
                 end' ios/Podfile
 
-          # 3. Собираем с ДОПОЛНИТЕЛЬНЫМИ флагами игнорирования
-          flutter build ios --release --no-codesign \
-            --extra-gen-snapshot-options=--no-generate-debug-info \
-            --build-name=1.0.0 \
-            --build-number=1
+          # 3. Сборка с отключением проверки индексов
+          flutter build ios --release --no-codesign --build-name=1.0.0 --build-number=1
           
       - name: Upload
         uses: actions/upload-artifact@v4
