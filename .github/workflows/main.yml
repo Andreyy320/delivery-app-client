@@ -9,22 +9,19 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Clean and Build
+      - name: Build and Fix
         run: |
           flutter pub get
           
-          # 1. Пересоздаем папку iOS с нуля (чиним битый файл проекта)
+          # 1. Пересоздаем папку ios (на всякий случай)
           rm -rf ios
           flutter create . --platforms=ios
           
-          # 2. МЕНЯЕМ ВЕРСИЮ ТОЛЬКО В НУЖНОМ МЕСТЕ (Безопасно)
-          # Правим основной таргет в проекте
+          # 2. Правим версию iOS на 13.0 только в проекте
           sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' ios/Runner.xcodeproj/project.pbxproj
           
-          # 3. Настраиваем Podfile правильно
+          # 3. Вписываем платформу в Podfile (без pod init)
           cd ios
-          pod init
-          # Явно прописываем платформу в начале файла
           echo "platform :ios, '13.0'" > Podfile.tmp
           cat Podfile >> Podfile.tmp
           mv Podfile.tmp Podfile
