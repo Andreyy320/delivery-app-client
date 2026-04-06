@@ -9,18 +9,18 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Fix iOS Version and Build
+      - name: Fix Project
         run: |
           flutter create . --platforms=ios
           flutter pub get
-          # Поднимаем версию iOS до 13.0, чтобы не было ошибки -G
-          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' ios/Runner.xcodeproj/project.pbxproj
+          # Исправляем версию iOS на 13.0 во всех файлах проекта
+          find . -type f -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} +
           cd ios
           rm -f Podfile
           pod install || true
           
       - name: Build IPA
-        run: flutter build ios --release --no-codesign --target-platform ios-arm64
+        run: flutter build ios --release --no-codesign
 
       - name: Upload
         uses: actions/upload-artifact@v4
