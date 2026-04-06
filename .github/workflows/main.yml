@@ -9,38 +9,47 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Force Modern iOS
+      - name: Surgical Fix and Build
         run: |
-          flutter config --no-analytics
           flutter pub get
-          
-          # 1. Сносим и создаем заново
           rm -rf ios
           flutter create . --platforms=ios
           
-          # 2. ПРИНУДИТЕЛЬНО прописываем 13.0 во ВСЕ конфиги, которые Flutter создает
-          # Мы меняем не только 10.0, а вообще любое упоминание версии на 13.0
-          find ios -type f -name "*.xcconfig" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} +
-          find ios -type f -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} +
-          
-          # 3. Добавляем фикс в Podfile, чтобы он ПЕРЕЗАПИСЫВАЛ настройки подов
+          # У заходим в папку ios
           cd ios
-          echo "post_install do |installer|
+          
+          # ПЕРЕЗАПИСЫВАЕМ Podfile полностью на рабочий вариант
+          cat <<EOF > Podfile
+          platform :ios, '13.0'
+          
+          # Это магическая строчка, которая связывает Flutter и Pods
+          load File.join(File.dirname(File.realpath(__FILE__)), 'Flutter', 'podhelper.rb')
+          
+          target 'Runner' do
+            use_frameworks!
+            use_modular_headers!
+            flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+          end
+          
+          post_install do |installer|
             installer.pods_project.targets.each do |target|
+              flutter_additional_ios_build_settings(target)
               target.build_configurations.each do |config|
+                # Вот тут мы убиваем ошибку -G наповал
                 config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
               end
             end
-          end" >> Podfile
+          end
+          EOF
           
-          pod install || true
+          pod install
           cd ..
           
       - name: Build IPA
-        run: flutter build ios --release --no-codesign --deployment-target=13.0
+        run: flutter build ios --release --no-codesign
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: my_app
+          name: app_bundle
           path: build/ios/iphoneos/*.app
