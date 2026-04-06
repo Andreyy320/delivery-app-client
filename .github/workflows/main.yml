@@ -1,4 +1,4 @@
-name: Build_IPA_Force
+name: Build_IPA_Final_v5
 on: [push, workflow_dispatch]
 jobs:
   build:
@@ -9,26 +9,28 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Hard Force Build
+      - name: Upgrade and Clean Build
         run: |
-          flutter pub get
+          # 1. Обновляем зависимости до последних совместимых
+          flutter pub upgrade
+          
+          # 2. Полная пересборка iOS части
           rm -rf ios
           flutter create . --platforms=ios
           
-          # 1. Смена версии на 13.0
-          find ios -type f -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} +
+          # 3. Принудительно вырезаем флаг -G из ВСЕХ файлов проекта
+          # Мы пройдемся по каждому файлу в папке ios
+          grep -rli ' "-G"' ios | xargs -I@ sed -i '' 's/ "-G"//g' @ || true
           
-          # 2. Инъекция флагов игнорирования в Podfile
-          # Мы заставляем компилятор молчать об ошибках в аргументах
+          # 4. Фикс версии и подавление ошибок в Podfile
           sed -i '' '/flutter_additional_ios_build_settings(target)/a \
                 target.build_configurations.each do |config| \
                   config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "13.0" \
                   config.build_settings["OTHER_CFLAGS"] = "-Wno-invalid-command-line-argument" \
-                  config.build_settings["OTHER_LDFLAGS"] = "-Wno-invalid-command-line-argument" \
                   config.build_settings["GCC_GENERATE_DEBUGGING_SYMBOLS"] = "NO" \
                 end' ios/Podfile
 
-          # 3. Сборка с отключением проверки индексов
+          # 5. Сборка с явным указанием архитектуры
           flutter build ios --release --no-codesign --build-name=1.0.0 --build-number=1
           
       - name: Upload
