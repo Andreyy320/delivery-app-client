@@ -1,4 +1,4 @@
-name: Build_iOS_Final_Fix
+name: Simple_Build
 on: [push, workflow_dispatch]
 
 jobs:
@@ -6,49 +6,23 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
-      - name: Fix and Build
+      - name: Just Build It
         run: |
           flutter pub get
-          rm -rf ios
-          flutter create . --platforms=ios
           
-          # 1. Меняем версию 10.0 на 13.0 во всем проекте
-          find ios -type f \( -name "*.pbxproj" -o -name "*.xcconfig" \) -exec sed -i '' 's/10.0/13.0/g' {} +
+          # 1. Просто поднимаем версию во всех файлах, где она может быть
+          find . -type f -name "*" -print0 | xargs -0 sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' || true
           
-          # 2. УДАЛЯЕМ старый Podfile и создаем свой ПРАВИЛЬНЫЙ с одним post_install
-          rm ios/Podfile
-          cat <<EOF > ios/Podfile
-          platform :ios, '13.0'
-          use_frameworks!
-          
-          target 'Runner' do
-            use_frameworks!
-            use_modular_headers!
-            flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
-          end
-          
-          post_install do |installer|
-            installer.pods_project.targets.each do |target|
-              flutter_additional_ios_build_settings(target)
-              target.build_configurations.each do |config|
-                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
-              end
-            end
-          end
-          EOF
-          
-          # 3. Установка подов и сборка
-          cd ios && pod install && cd ..
+          # 2. Собираем. БЕЗ дополнительных настроек подов.
+          # Если не соберется для девайса, соберем для симулятора (это быстрее и проще)
           flutter build ios --release --no-codesign
-
+          
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: my_app_ready
+          name: app_file
           path: build/ios/iphoneos/*.app
