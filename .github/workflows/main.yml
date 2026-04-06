@@ -1,4 +1,4 @@
-name: Simple_Build
+name: Build_iOS_Standard
 on: [push, workflow_dispatch]
 
 jobs:
@@ -6,22 +6,27 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
-      - name: Just Build It
+      - name: Auto-Generate and Build
         run: |
+          # 1. Чистим всё старое, что могло сломаться
+          flutter clean
           flutter pub get
+          rm -rf ios
           
-          # 1. Просто поднимаем версию во всех файлах, где она может быть
-          find . -type f -name "*" -print0 | xargs -0 sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' || true
+          # 2. Позволяем Flutter создать ПРАВИЛЬНУЮ папку ios для текущей версии
+          flutter create . --platforms=ios
           
-          # 2. Собираем. БЕЗ дополнительных настроек подов.
-          # Если не соберется для девайса, соберем для симулятора (это быстрее и проще)
+          # 3. Запускаем сборку. Flutter сам вызовет pod install и настроит всё как надо.
+          # Мы просто добавим флаг, чтобы не требовать подпись.
           flutter build ios --release --no-codesign
           
-      - name: Upload
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: app_file
