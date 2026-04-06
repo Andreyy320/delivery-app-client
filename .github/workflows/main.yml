@@ -9,15 +9,28 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Fix Project
+      - name: Create Podfile and Build
         run: |
-          flutter create . --platforms=ios
           flutter pub get
-          # Исправляем версию iOS на 13.0 во всех файлах проекта
-          find . -type f -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} +
+          
+          # Заходим в папку ios (создаем её если пустая)
+          flutter create . --platforms=ios
           cd ios
-          rm -f Podfile
+          
+          # РУЧНОЕ СОЗДАНИЕ PODFILE (чтобы точно не 10.0)
+          cat <<EOF > Podfile
+          platform :ios, '13.0'
+          use_frameworks!
+          target 'Runner' do
+            flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+          end
+          EOF
+
+          # Принудительно правим версию в проекте Xcode
+          find . -type f -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} +
+          
           pod install || true
+          cd ..
           
       - name: Build IPA
         run: flutter build ios --release --no-codesign
