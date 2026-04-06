@@ -8,15 +8,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
       - name: Build Web
         run: |
           flutter pub get
-          # Фикс: используем --web-renderer html (он легче) и явно указываем путь
-          flutter build web --release --web-renderer html --base-href /${{ github.event.repository.name }}/
+          # Убрали проблемный флаг. Теперь ошибок 64 не будет.
+          flutter build web --release --base-href /${{ github.event.repository.name }}/
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
