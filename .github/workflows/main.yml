@@ -9,21 +9,26 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Hard Reset iOS and Build
+      - name: Kill iOS 10 and Build
         run: |
-          # 1. Очистка кеша
           flutter pub get
           
-          # 2. Полное пересоздание платформы iOS (правит все конфиги)
+          # 1. Полный снос старого
           rm -rf ios
           flutter create . --platforms=ios
           
-          # 3. Принудительная версия 13.0 везде
-          find . -type f -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} +
+          # 2. ПРИНУДИТЕЛЬНАЯ ЗАМЕНА ВЕРСИИ ВО ВСЕХ КОНФИГАХ (Xcode и Flutter)
+          find . -type f \( -name "*.pbxproj" -o -name "*.xcconfig" -o -name "Podfile" \) -exec sed -i '' 's/10.0/13.0/g' {} +
+          find . -type f \( -name "*.pbxproj" -o -name "*.xcconfig" -o -name "Podfile" \) -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} +
           
-          # 4. Установка подов через сам Flutter (он знает, как их ставить правильно)
-          flutter build ios --release --no-codesign --pub
+          # 3. Установка подов
+          cd ios
+          pod install || true
+          cd ..
           
+      - name: Build IPA
+        run: flutter build ios --release --no-codesign
+
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
