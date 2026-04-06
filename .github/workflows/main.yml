@@ -1,4 +1,4 @@
-name: Build_Simple_IPA
+name: Build_Final_Attempt
 on: [push, workflow_dispatch]
 jobs:
   build:
@@ -8,15 +8,24 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-      
-      - name: Build
+
+      - name: Build App
         run: |
+          # 1. Подтягиваем пакеты
           flutter pub get
-          # Мы НЕ запускаем установку подов, а сразу просим собрать проект
+          
+          # 2. Сносим ios и создаем её заново (чтобы были все файлы проекта)
+          rm -rf ios
+          flutter create . --platforms=ios
+          
+          # 3. Фиксим версию iOS до 13.0, чтобы не было ошибки -G
+          find . -type f -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} +
+          
+          # 4. Устанавливаем поды (Flutter сделает это сам правильно)
           flutter build ios --release --no-codesign
           
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: app_file
+          name: my_app
           path: build/ios/iphoneos/*.app
