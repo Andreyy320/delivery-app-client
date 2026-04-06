@@ -1,4 +1,4 @@
-name: Build_Final_Attempt
+name: Build_IPA
 on: [push, workflow_dispatch]
 jobs:
   build:
@@ -9,21 +9,36 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Build App
+      - name: Force Modern iOS
         run: |
-          # 1. Подтягиваем пакеты
+          flutter config --no-analytics
           flutter pub get
           
-          # 2. Сносим ios и создаем её заново (чтобы были все файлы проекта)
+          # 1. Сносим и создаем заново
           rm -rf ios
           flutter create . --platforms=ios
           
-          # 3. Фиксим версию iOS до 13.0, чтобы не было ошибки -G
-          find . -type f -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} +
+          # 2. ПРИНУДИТЕЛЬНО прописываем 13.0 во ВСЕ конфиги, которые Flutter создает
+          # Мы меняем не только 10.0, а вообще любое упоминание версии на 13.0
+          find ios -type f -name "*.xcconfig" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} +
+          find ios -type f -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} +
           
-          # 4. Устанавливаем поды (Flutter сделает это сам правильно)
-          flutter build ios --release --no-codesign
+          # 3. Добавляем фикс в Podfile, чтобы он ПЕРЕЗАПИСЫВАЛ настройки подов
+          cd ios
+          echo "post_install do |installer|
+            installer.pods_project.targets.each do |target|
+              target.build_configurations.each do |config|
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+              end
+            end
+          end" >> Podfile
           
+          pod install || true
+          cd ..
+          
+      - name: Build IPA
+        run: flutter build ios --release --no-codesign --deployment-target=13.0
+
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
