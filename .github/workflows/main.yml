@@ -9,28 +9,34 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Build and Fix
+      - name: Force Build iOS 13
         run: |
           flutter pub get
           
-          # 1. Пересоздаем папку ios (на всякий случай)
+          # 1. Сносим и пересоздаем (лечит битые файлы)
           rm -rf ios
           flutter create . --platforms=ios
           
-          # 2. Правим версию iOS на 13.0 только в проекте
-          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' ios/Runner.xcodeproj/project.pbxproj
-          
-          # 3. Вписываем платформу в Podfile (без pod init)
+          # 2. Магический скрипт: форсируем 13.0 для ВСЕХ подов и таргетов
           cd ios
-          echo "platform :ios, '13.0'" > Podfile.tmp
-          cat Podfile >> Podfile.tmp
-          mv Podfile.tmp Podfile
+          echo "post_install do |installer|
+            installer.pods_project.targets.each do |target|
+              target.build_configurations.each do |config|
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+              end
+            end
+          end" >> Podfile
           
           pod install || true
           cd ..
           
       - name: Build IPA
-        run: flutter build ios --release --no-codesign
+        run: flutter build ios --release --no-codesign --config-only
+        
+      - name: Final Compile
+        run: |
+          # Собираем через xcodebuild напрямую, чтобы обойти глюки Flutter CLI
+          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release -sdk iphoneos CODE_SIGNING_ALLOWED=NO
 
       - name: Upload
         uses: actions/upload-artifact@v4
