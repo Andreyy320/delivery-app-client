@@ -1,11 +1,9 @@
-name: Flutter_Quick_Build
+name: Build_IPA_Final_Attempt
 on: [push, workflow_dispatch]
 
 jobs:
   build:
-    # Используем актуальный стандартный образ
     runs-on: macos-latest
-    
     steps:
       - uses: actions/checkout@v4
       
@@ -13,22 +11,35 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          
-      - name: Install
+
+      - name: Hard Fix iOS Config
         run: |
           flutter pub get
-          # Создаем iOS папку с нуля, чтобы не было старых багов
           rm -rf ios
           flutter create . --platforms=ios
           
-      - name: Build
-        run: |
-          # Главный секрет: флаг --bundle-sksl-path или просто чистый билд
-          # Мы добавляем аргумент, который принудительно отключает проверку флагов
-          flutter build ios --release --no-codesign --no-codesign
-        
+          # ЖЕСТКИЙ ФИКС: Ищем все упоминания 10.0 и меняем на 13.0
+          # Это уберет причину появления ошибки -G
+          find ios -type f \( -name "*.pbxproj" -o -name "*.xcconfig" \) -exec sed -i '' 's/10.0/13.0/g' {} +
+          
+          # Настройка Podfile, чтобы зависимости тоже не просили iOS 10
+          cd ios
+          echo "post_install do |installer|
+            installer.pods_project.targets.each do |target|
+              flutter_additional_ios_build_settings(target)
+              target.build_configurations.each do |config|
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+              end
+            end
+          end" >> Podfile
+          pod install
+          cd ..
+
+      - name: Final Build
+        run: flutter build ios --release --no-codesign
+
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: my_app
+          name: app_bundle
           path: build/ios/iphoneos/*.app
