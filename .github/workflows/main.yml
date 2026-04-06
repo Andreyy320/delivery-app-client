@@ -1,4 +1,4 @@
-name: Build_IPA_Final_v3
+name: Build_IPA_Final_v4
 on: [push, workflow_dispatch]
 jobs:
   build:
@@ -9,27 +9,28 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Kill Error G and Build
+      - name: Force Build Without Debug G
         run: |
           flutter pub get
           rm -rf ios
           flutter create . --platforms=ios
           
-          # 1. Меняем версию на 13.0 везде
+          # 1. Снова фиксим версию (это мы уже умеем)
           find ios -type f -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} +
           
-          # 2. УДАЛЯЕМ флаг -G, который бесит Xcode
-          find ios -type f -name "*.pbxproj" -exec sed -i '' 's/-G//g' {} +
-          
-          # 3. Умная вставка версии в Podfile
+          # 2. Инъекция в Podfile для отключения проблемных флагов
           sed -i '' '/flutter_additional_ios_build_settings(target)/a \
                 target.build_configurations.each do |config| \
                   config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "13.0" \
-                  config.build_settings["GCC_ GENERIC_VALUE_PROPAGATION"] = "NO" \
+                  config.build_settings["GCC_GENERATE_DEBUGGING_SYMBOLS"] = "NO" \
+                  config.build_settings["COMPILER_INDEX_STORE_ENABLE"] = "NO" \
                 end' ios/Podfile
 
-          # 4. Собираем
-          flutter build ios --release --no-codesign
+          # 3. Собираем с ДОПОЛНИТЕЛЬНЫМИ флагами игнорирования
+          flutter build ios --release --no-codesign \
+            --extra-gen-snapshot-options=--no-generate-debug-info \
+            --build-name=1.0.0 \
+            --build-number=1
           
       - name: Upload
         uses: actions/upload-artifact@v4
