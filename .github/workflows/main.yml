@@ -1,11 +1,9 @@
-name: Get_My_IPA
+name: Build_IPA_Simple
 on: [push, workflow_dispatch]
 
 jobs:
   build:
-    # Используем старую систему, которая не ругается на флаг -G
-    runs-on: macos-13
-    
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -15,11 +13,14 @@ jobs:
       - name: Build
         run: |
           flutter pub get
-          # Собираем как есть, без исправлений
+          # Фикс версии, чтобы Xcode не ругался на -G
+          find ios -name "*.pbxproj" -exec sed -i '' 's/10.0/13.0/g' {} +
+          
+          # Сборка без проверок подписи
           flutter build ios --release --no-codesign
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: my_app
+          name: app_ready
           path: build/ios/iphoneos/*.app
