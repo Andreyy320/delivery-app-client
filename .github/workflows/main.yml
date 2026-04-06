@@ -9,32 +9,21 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Create Podfile and Build
+      - name: Hard Reset iOS and Build
         run: |
+          # 1. Очистка кеша
           flutter pub get
           
-          # Заходим в папку ios (создаем её если пустая)
+          # 2. Полное пересоздание платформы iOS (правит все конфиги)
+          rm -rf ios
           flutter create . --platforms=ios
-          cd ios
           
-          # РУЧНОЕ СОЗДАНИЕ PODFILE (чтобы точно не 10.0)
-          cat <<EOF > Podfile
-          platform :ios, '13.0'
-          use_frameworks!
-          target 'Runner' do
-            flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
-          end
-          EOF
-
-          # Принудительно правим версию в проекте Xcode
+          # 3. Принудительная версия 13.0 везде
           find . -type f -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} +
           
-          pod install || true
-          cd ..
+          # 4. Установка подов через сам Flutter (он знает, как их ставить правильно)
+          flutter build ios --release --no-codesign --pub
           
-      - name: Build IPA
-        run: flutter build ios --release --no-codesign
-
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
