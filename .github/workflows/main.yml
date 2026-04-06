@@ -1,7 +1,8 @@
 name: Deploy_To_Web
 on:
   push:
-    branches: [ main ] # Проверь, что ветка называется main, а не master
+    branches: [ main ]
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -14,8 +15,8 @@ jobs:
       - name: Build Web
         run: |
           flutter pub get
-          # Самая простая команда сборки без лишних флагов
-          flutter build web --release --base-href /${{ github.event.repository.name }}/
+          # Фикс: используем --web-renderer html (он легче) и явно указываем путь
+          flutter build web --release --web-renderer html --base-href /${{ github.event.repository.name }}/
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
