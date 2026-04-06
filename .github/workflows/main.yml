@@ -1,4 +1,4 @@
-name: Build_IPA_Final_Attempt
+name: Build_iOS_Final_Fix
 on: [push, workflow_dispatch]
 
 jobs:
@@ -12,34 +12,43 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Hard Fix iOS Config
+      - name: Fix and Build
         run: |
           flutter pub get
           rm -rf ios
           flutter create . --platforms=ios
           
-          # ЖЕСТКИЙ ФИКС: Ищем все упоминания 10.0 и меняем на 13.0
-          # Это уберет причину появления ошибки -G
+          # 1. Меняем версию 10.0 на 13.0 во всем проекте
           find ios -type f \( -name "*.pbxproj" -o -name "*.xcconfig" \) -exec sed -i '' 's/10.0/13.0/g' {} +
           
-          # Настройка Podfile, чтобы зависимости тоже не просили iOS 10
-          cd ios
-          echo "post_install do |installer|
+          # 2. УДАЛЯЕМ старый Podfile и создаем свой ПРАВИЛЬНЫЙ с одним post_install
+          rm ios/Podfile
+          cat <<EOF > ios/Podfile
+          platform :ios, '13.0'
+          use_frameworks!
+          
+          target 'Runner' do
+            use_frameworks!
+            use_modular_headers!
+            flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+          end
+          
+          post_install do |installer|
             installer.pods_project.targets.each do |target|
               flutter_additional_ios_build_settings(target)
               target.build_configurations.each do |config|
                 config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
               end
             end
-          end" >> Podfile
-          pod install
-          cd ..
-
-      - name: Final Build
-        run: flutter build ios --release --no-codesign
+          end
+          EOF
+          
+          # 3. Установка подов и сборка
+          cd ios && pod install && cd ..
+          flutter build ios --release --no-codesign
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: app_bundle
+          name: my_app_ready
           path: build/ios/iphoneos/*.app
