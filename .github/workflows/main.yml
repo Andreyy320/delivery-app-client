@@ -9,35 +9,43 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Force Build iOS 13
+      - name: Hard Force iOS 13
         run: |
           flutter pub get
-          
-          # 1. Сносим и пересоздаем (лечит битые файлы)
           rm -rf ios
           flutter create . --platforms=ios
           
-          # 2. Магический скрипт: форсируем 13.0 для ВСЕХ подов и таргетов
           cd ios
-          echo "post_install do |installer|
+          # Создаем идеальный Podfile с нуля
+          cat <<EOF > Podfile
+          platform :ios, '13.0'
+          use_frameworks!
+          
+          target 'Runner' do
+            use_frameworks!
+            use_modular_headers!
+            flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+          end
+          
+          post_install do |installer|
             installer.pods_project.targets.each do |target|
+              flutter_additional_ios_build_settings(target)
               target.build_configurations.each do |config|
                 config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+                config.build_settings['ENABLE_BITCODE'] = 'NO'
               end
             end
-          end" >> Podfile
+          end
+          EOF
           
           pod install || true
           cd ..
-          
-      - name: Build IPA
-        run: flutter build ios --release --no-codesign --config-only
-        
-      - name: Final Compile
-        run: |
-          # Собираем через xcodebuild напрямую, чтобы обойти глюки Flutter CLI
-          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release -sdk iphoneos CODE_SIGNING_ALLOWED=NO
 
+      - name: Build IPA
+        run: |
+          # Прямая сборка через xcodebuild (самый надежный способ)
+          flutter build ios --release --no-codesign
+          
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
