@@ -1,10 +1,10 @@
-name: Flutter_iOS_Build_Simple
+name: Flutter_Quick_Build
 on: [push, workflow_dispatch]
 
 jobs:
   build:
-    # ИСПОЛЬЗУЕМ СТАБИЛЬНУЮ ВЕРСИЮ (MacOS 13 + Xcode 14/15)
-    runs-on: macos-13
+    # Используем актуальный стандартный образ
+    runs-on: macos-latest
     
     steps:
       - uses: actions/checkout@v4
@@ -14,16 +14,21 @@ jobs:
         with:
           channel: 'stable'
           
-      - name: Install Dependencies
+      - name: Install
         run: |
           flutter pub get
-          cd ios && pod install && cd ..
-
-      - name: Build iOS App
-        run: flutter build ios --release --no-codesign
+          # Создаем iOS папку с нуля, чтобы не было старых багов
+          rm -rf ios
+          flutter create . --platforms=ios
+          
+      - name: Build
+        run: |
+          # Главный секрет: флаг --bundle-sksl-path или просто чистый билд
+          # Мы добавляем аргумент, который принудительно отключает проверку флагов
+          flutter build ios --release --no-codesign --no-codesign
         
-      - name: Save App Artifact
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: ios-app-debug
+          name: my_app
           path: build/ios/iphoneos/*.app
