@@ -2,7 +2,6 @@ name: Deploy_To_Web
 on:
   push:
     branches: [ main ] # Проверь, что ветка называется main, а не master
-
 jobs:
   build:
     runs-on: ubuntu-latest
