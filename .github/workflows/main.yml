@@ -9,18 +9,18 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Reconstruct iOS folder
+      - name: Fix iOS Version and Build
         run: |
-          # Эта команда создаст недостающие файлы ios, если их нет
           flutter create . --platforms=ios
           flutter pub get
+          # Поднимаем версию iOS до 13.0, чтобы не было ошибки -G
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' ios/Runner.xcodeproj/project.pbxproj
           cd ios
-          # Удаляем старый Podfile, чтобы Flutter создал новый и правильный
           rm -f Podfile
           pod install || true
-
+          
       - name: Build IPA
-        run: flutter build ios --release --no-codesign
+        run: flutter build ios --release --no-codesign --target-platform ios-arm64
 
       - name: Upload
         uses: actions/upload-artifact@v4
