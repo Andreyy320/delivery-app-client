@@ -9,20 +9,26 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Kill iOS 10 and Build
+      - name: Clean and Build
         run: |
           flutter pub get
           
-          # 1. Полный снос старого
+          # 1. Пересоздаем папку iOS с нуля (чиним битый файл проекта)
           rm -rf ios
           flutter create . --platforms=ios
           
-          # 2. ПРИНУДИТЕЛЬНАЯ ЗАМЕНА ВЕРСИИ ВО ВСЕХ КОНФИГАХ (Xcode и Flutter)
-          find . -type f \( -name "*.pbxproj" -o -name "*.xcconfig" -o -name "Podfile" \) -exec sed -i '' 's/10.0/13.0/g' {} +
-          find . -type f \( -name "*.pbxproj" -o -name "*.xcconfig" -o -name "Podfile" \) -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' {} +
+          # 2. МЕНЯЕМ ВЕРСИЮ ТОЛЬКО В НУЖНОМ МЕСТЕ (Безопасно)
+          # Правим основной таргет в проекте
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 10.0/IPHONEOS_DEPLOYMENT_TARGET = 13.0/g' ios/Runner.xcodeproj/project.pbxproj
           
-          # 3. Установка подов
+          # 3. Настраиваем Podfile правильно
           cd ios
+          pod init
+          # Явно прописываем платформу в начале файла
+          echo "platform :ios, '13.0'" > Podfile.tmp
+          cat Podfile >> Podfile.tmp
+          mv Podfile.tmp Podfile
+          
           pod install || true
           cd ..
           
