@@ -96,7 +96,8 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
     );
     if (result != null) {
       controller.text =
-      'Ш: ${result.latitude.toStringAsFixed(5)}, Д: ${result.longitude.toStringAsFixed(5)}';
+      'Ш: ${result.latitude.toStringAsFixed(5)}, Д: ${result.longitude
+          .toStringAsFixed(5)}';
     }
   }
 
@@ -133,13 +134,16 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
                     children: [
                       const Text(
                         'Выберите время',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.bold),
                       ),
                       IconButton(
                         icon: Container(
                           padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(color: Colors.grey[100], shape: BoxShape.circle),
-                          child: const Icon(Icons.close, size: 20, color: Colors.black),
+                          decoration: BoxDecoration(
+                              color: Colors.grey[100], shape: BoxShape.circle),
+                          child: const Icon(
+                              Icons.close, size: 20, color: Colors.black),
                         ),
                         onPressed: () => Navigator.pop(context),
                       ),
@@ -186,7 +190,10 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
                             flex: 1, // 🎯 Занимает 25%
                             child: _buildPicker(
                               initialItem: selectedMinute,
-                              items: List.generate(60, (i) => '${i.toString().padLeft(2, '0')} м'), // Сократил "мин" до "м" для экономии места
+                              items: List.generate(
+                                  60, (i) => '${i.toString().padLeft(
+                                  2, '0')} м'),
+                              // Сократил "мин" до "м" для экономии места
                               onChanged: (index) {
                                 setModalState(() => selectedMinute = index);
                                 setState(() => timeSelected = true);
@@ -202,14 +209,18 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
 
                   // Текущий выбор
                   Container(
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 8, horizontal: 16),
                     decoration: BoxDecoration(
                       color: Colors.deepOrange.withOpacity(0.05),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      'Выбрано: ${days[selectedDayIndex]}, ${selectedHour.toString().padLeft(2, '0')}:${selectedMinute.toString().padLeft(2, '0')}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange),
+                      'Выбрано: ${days[selectedDayIndex]}, ${selectedHour
+                          .toString().padLeft(2, '0')}:${selectedMinute
+                          .toString().padLeft(2, '0')}',
+                      style: const TextStyle(fontWeight: FontWeight.bold,
+                          color: Colors.deepOrange),
                     ),
                   ),
 
@@ -234,12 +245,14 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
                         backgroundColor: Colors.deepOrange,
                         foregroundColor: Colors.white,
                         elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius
+                            .circular(16)),
                       ),
                       onPressed: () => Navigator.pop(context),
                       child: const Text(
                         'ГОТОВО',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight
+                            .bold, letterSpacing: 1.2),
                       ),
                     ),
                   ),
@@ -263,18 +276,19 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
       scrollController: FixedExtentScrollController(initialItem: initialItem),
       itemExtent: 40,
       onSelectedItemChanged: onChanged,
-      children: items.map((item) => Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: FittedBox( // 🎯 Сжимает текст "Послезавтра", если он всё равно не влез
-            fit: BoxFit.scaleDown,
-            child: Text(
-              item,
-              style: const TextStyle(fontSize: 18),
+      children: items.map((item) =>
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: FittedBox( // 🎯 Сжимает текст "Послезавтра", если он всё равно не влез
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  item,
+                  style: const TextStyle(fontSize: 18),
+                ),
+              ),
             ),
-          ),
-        ),
-      )).toList(),
+          )).toList(),
     );
   }
 
@@ -282,26 +296,29 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
-        appBar: AppBar(
-          backgroundColor: Colors.deepOrange,
-          elevation: 0,
-          centerTitle: true,
-          // Делаем иконку "Назад" белой
-          iconTheme: const IconThemeData(color: Colors.black),
-          title: SizedBox(
-            width: MediaQuery.of(context).size.width * 0.7, // Ограничиваем ширину, чтобы не наезжать на иконки
-            child: const FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                'Грузоперевозка по городу',
-                style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 20, // Базовый размер, который будет сжиматься
-                ),
+      appBar: AppBar(
+        backgroundColor: Colors.deepOrange,
+        elevation: 0,
+        centerTitle: true,
+        // Делаем иконку "Назад" белой
+        iconTheme: const IconThemeData(color: Colors.black),
+        title: SizedBox(
+          width: MediaQuery
+              .of(context)
+              .size
+              .width * 0.7, // Ограничиваем ширину, чтобы не наезжать на иконки
+          child: const FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              'Грузоперевозка по городу',
+              style: TextStyle(
+                color: Colors.black,
+                fontSize: 20, // Базовый размер, который будет сжиматься
               ),
             ),
           ),
         ),
+      ),
       body: Column(
         children: [
           Expanded(
@@ -342,7 +359,8 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
                       children: [
                         const Text(
                           'Детали подачи',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight
+                              .bold),
                         ),
                         const SizedBox(height: 22),
                         _AddressField(
@@ -363,34 +381,49 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
                           onTap: _showTimePickerSheet,
                           borderRadius: BorderRadius.circular(12),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 12, horizontal: 8),
                             decoration: BoxDecoration(
-                              color: timeSelected ? Colors.orange.withOpacity(0.05) : Colors.transparent,
+                              color: timeSelected ? Colors.orange.withOpacity(
+                                  0.05) : Colors.transparent,
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Row(
                               children: [
-                                Icon(Icons.access_time, color: timeSelected ? Colors.deepOrange : Colors.grey),
+                                Icon(Icons.access_time, color: timeSelected
+                                    ? Colors.deepOrange
+                                    : Colors.grey),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
                                     timeSelected
-                                        ? 'Время: ${days[selectedDayIndex]}, ${selectedHour.toString().padLeft(2, '0')}:${selectedMinute.toString().padLeft(2, '0')}'
+                                        ? 'Время: ${days[selectedDayIndex]}, ${selectedHour
+                                        .toString().padLeft(
+                                        2, '0')}:${selectedMinute
+                                        .toString()
+                                        .padLeft(2, '0')}'
                                         : 'Заказать ко времени',
                                     style: TextStyle(
                                         fontSize: 16,
-                                        fontWeight: timeSelected ? FontWeight.bold : FontWeight.normal,
-                                        color: timeSelected ? Colors.black : Colors.grey[700]
+                                        fontWeight: timeSelected ? FontWeight
+                                            .bold : FontWeight.normal,
+                                        color: timeSelected
+                                            ? Colors.black
+                                            : Colors.grey[700]
                                     ),
                                   ),
                                 ),
                                 if (timeSelected)
                                   IconButton(
-                                    icon: const Icon(Icons.close, color: Colors.red, size: 20),
-                                    onPressed: () => setState(() => timeSelected = false),
+                                    icon: const Icon(
+                                        Icons.close, color: Colors.red,
+                                        size: 20),
+                                    onPressed: () =>
+                                        setState(() => timeSelected = false),
                                   )
                                 else
-                                  const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+                                  const Icon(Icons.arrow_forward_ios, size: 14,
+                                      color: Colors.grey),
                               ],
                             ),
                           ),
@@ -406,10 +439,12 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
 
           // ======= КРАСИВАЯ НИЖНЯЯ ПАНЕЛЬ =======
           Container(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32), // Увеличен отступ снизу
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+            // Увеличен отступ снизу
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24)),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.08),
@@ -465,22 +500,24 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
                         DateTime? scheduledTimeValue = timeSelected
                             ? DateTime.now()
                             .add(Duration(days: selectedDayIndex))
-                            .copyWith(hour: selectedHour, minute: selectedMinute)
+                            .copyWith(
+                            hour: selectedHour, minute: selectedMinute)
                             : null;
 
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => GorodOrderConfirmationScreen(
-                              fromAddress: fromController.text,
-                              toAddress: toController.text,
-                              bodySize: selectedBody,
-                              loaders: loaders,
-                              escort: escort,
-                              timeSelected: timeSelected,
-                              scheduledTime: scheduledTimeValue,
-                              totalPrice: _calculatePrice(),
-                            ),
+                            builder: (_) =>
+                                GorodOrderConfirmationScreen(
+                                  fromAddress: fromController.text,
+                                  toAddress: toController.text,
+                                  bodySize: selectedBody,
+                                  loaders: loaders,
+                                  escort: escort,
+                                  timeSelected: timeSelected,
+                                  scheduledTime: scheduledTimeValue,
+                                  totalPrice: _calculatePrice(),
+                                ),
                           ),
                         );
                       },
@@ -571,29 +608,47 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
     return Row(
       children: [
         Expanded(
-          child: Text(title,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          flex: 1,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+                title,
+                style: const TextStyle(
+                    fontSize: 17, fontWeight: FontWeight.bold)
+            ),
+          ),
         ),
-        Row(
-          children: options.map((opt) {
-            final isSelected = opt == selected;
-            return GestureDetector(
-              onTap: () => onSelect(opt),
-              child: Container(
-                margin: const EdgeInsets.only(left: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isSelected ? Colors.deepOrange : Colors.grey[200],
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  opt,
-                  style: TextStyle(
-                      color: isSelected ? Colors.white : Colors.black, fontWeight: FontWeight.bold),
-                ),
-              ),
-            );
-          }).toList(),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 2, // Даем больше места кнопкам выбора (S, M, L, XL, XXL)
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: options.map((opt) {
+                final isSelected = opt == selected;
+                return GestureDetector(
+                  onTap: () => onSelect(opt),
+                  child: Container(
+                    margin: const EdgeInsets.only(left: 6),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.deepOrange : Colors.grey[200],
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      opt,
+                      style: TextStyle(
+                          color: isSelected ? Colors.white : Colors.black,
+                          fontWeight: FontWeight.bold
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
         ),
       ],
     );
@@ -606,24 +661,17 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
   }) {
     return Row(
       children: [
-        // 🎯 Исправленная часть:
         Expanded(
           child: FittedBox(
-            fit: BoxFit.scaleDown, // Сжимает текст, если он не влезает
-            alignment: Alignment.centerLeft, // Прижимает к левому краю
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
             child: Text(
               title,
-              style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold
-              ),
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
             ),
           ),
         ),
-
-        const SizedBox(width: 8), // Небольшой зазор между текстом и кнопками
-
-        // Твой блок с кнопками (0, 1, 2)
+        const SizedBox(width: 8), // Зазор перед кнопками
         Row(
           children: List.generate(3, (index) {
             final isSelected = value == index;
@@ -631,7 +679,8 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
               onTap: () => onChanged(index),
               child: Container(
                 margin: const EdgeInsets.only(left: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
                   color: isSelected ? Colors.deepOrange : Colors.grey[200],
                   borderRadius: BorderRadius.circular(10),
@@ -649,7 +698,8 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
         ),
       ],
     );
-  }}
+  }
+}
 
 // ======= Экран выбора локации =======
 class SelectLocationScreen extends StatefulWidget {
