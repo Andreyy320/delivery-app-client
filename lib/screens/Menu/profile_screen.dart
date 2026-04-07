@@ -65,188 +65,235 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildAuthButtons() {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              ElevatedButton(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                ).then((_) => _loadUser()),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange),
-                child: const Text('Войти'),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const RegistrationScreen()),
-                ).then((_) => _loadUser()),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange),
-                child: const Text('Зарегистрироваться'),
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Логотип или иконка приложения
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.deepOrange.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.local_shipping, size: 80, color: Colors.deepOrange),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Добро пожаловать!',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Войдите, чтобы управлять заказами',
+                  style: TextStyle(color: Colors.grey, fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 48),
+
+                // Кнопка ВОЙТИ
+                _buildBigButton(
+                  label: 'ВОЙТИ',
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  ).then((_) => _loadUser()),
+                ),
+
+                const SizedBox(height: 16),
+
+                // Кнопка РЕГИСТРАЦИЯ
+                SizedBox(
+                  width: double.infinity,
+                  height: 60,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const RegistrationScreen()),
+                    ).then((_) => _loadUser()),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.deepOrange, width: 2),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    child: const Text(
+                      'СОЗДАТЬ АККАУНТ',
+                      style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
+// Вынес нашу фирменную кнопку в отдельный метод, чтобы не дублировать код
+  Widget _buildBigButton({required String label, required VoidCallback onPressed}) {
+    return Container(
+      width: double.infinity,
+      height: 60,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.deepOrange.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.deepOrange,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+      ),
+    );
+  }
   Widget _buildProfile() {
     final name = currentUser?['name'] ?? 'Гость';
-    final phone = currentUser?['phone'] ?? '';
-    final email = currentUser?['email'] ?? '';
+    final phone = currentUser?['phone'] ?? 'Не указан';
+    final email = currentUser?['email'] ?? 'Не указан';
 
     return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              // Верхняя карточка профиля
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Colors.deepOrange, Colors.orangeAccent],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(30),
-                    bottomRight: Radius.circular(30),
-                  ),
+      backgroundColor: Colors.grey[50],
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // ВЕРХНЯЯ КАРТОЧКА (ШАПКА)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(24, 60, 24, 40),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.deepOrange, Colors.orangeAccent],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Привет, $name',
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Text('Телефон: $phone',
-                        style: const TextStyle(color: Colors.white70, fontSize: 16)),
-                    Text('Email: $email',
-                        style: const TextStyle(color: Colors.white70, fontSize: 16)),
-                  ],
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(40),
+                  bottomRight: Radius.circular(40),
                 ),
               ),
-              const SizedBox(height: 20),
-
-              // Ссылки профиля
-              Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                child: Column(
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.receipt_long, color: Colors.deepOrange),
-                      title: const Text('История заказов'),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                      onTap: () {
-                        debugPrint('Тыкнули на историю заказов');
-                        if (currentUser != null && currentUser!['uid'] != null) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => OrdersScreen(userId: currentUser!['uid']),
-                            ),
-                          );
-                        }
-                      },
-
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.local_shipping, color: Colors.deepOrange),
-                      title: const Text('Мои заказы'),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const OrdersStatusScreen()),
-                        );
-                      },
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.lock, color: Colors.deepOrange),
-                      title: const Text('Изменить пароль'),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const ChangePasswordScreen()),
-                        );
-                      },
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.notifications, color: Colors.deepOrange),
-                      title: const Text('Настройки уведомлений'),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const NotificationSettingsScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.info, color: Colors.deepOrange),
-                      title: const Text('О приложении'),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const AboutAppScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 30),
-
-              // Кнопка выхода
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      await UserStorage.logout();
-                      authState.logout();
-                      setState(() {
-                        currentUser = null;
-                      });
-                    },
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14))),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                      child: Text('Выйти', style: TextStyle(fontSize: 16)),
-                    ),
+              child: Column(
+                children: [
+                  const CircleAvatar(
+                    radius: 40,
+                    backgroundColor: Colors.white,
+                    child: Icon(Icons.person, size: 50, color: Colors.deepOrange),
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  Text(
+                    name,
+                    style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.phone, color: Colors.white70, size: 14),
+                      const SizedBox(width: 6),
+                      Text(phone, style: const TextStyle(color: Colors.white70)),
+                      const SizedBox(width: 16),
+                      const Icon(Icons.email, color: Colors.white70, size: 14),
+                      const SizedBox(width: 6),
+                      Text(email, style: const TextStyle(color: Colors.white70)),
+                    ],
+                  ),
+                ],
               ),
-              const SizedBox(height: 30),
-            ],
-          ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // МЕНЮ НАСТРОЕК
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('  Личные данные', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  _buildMenuCard([
+                    _menuItem(Icons.receipt_long, 'История заказов', () {
+                      if (currentUser != null && currentUser!['uid'] != null) {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => OrdersScreen(userId: currentUser!['uid'])));
+                      }
+                    }),
+                    _menuItem(Icons.local_shipping, 'Мои заказы', () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const OrdersStatusScreen()));
+                    }),
+                  ]),
+
+                  const SizedBox(height: 24),
+                  const Text('  Безопасность и связь', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  _buildMenuCard([
+                    _menuItem(Icons.lock_outline, 'Изменить пароль', () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangePasswordScreen()));
+                    }),
+                    _menuItem(Icons.notifications_none, 'Настройки уведомлений', () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationSettingsScreen()));
+                    }),
+                    _menuItem(Icons.info_outline, 'О приложении', () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutAppScreen()));
+                    }),
+                  ]),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 40),
+
+            // КНОПКА ВЫХОДА
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: TextButton.icon(
+                onPressed: () async {
+                  await UserStorage.logout();
+                  authState.logout();
+                  setState(() => currentUser = null);
+                },
+                icon: const Icon(Icons.logout, color: Colors.red),
+                label: const Text('Выйти из аккаунта', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
+            ),
+            const SizedBox(height: 40),
+          ],
         ),
       ),
+    );
+  }
+
+// Вспомогательные виджеты для профиля
+  Widget _buildMenuCard(List<Widget> items) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Column(children: items),
+    );
+  }
+
+  Widget _menuItem(IconData icon, String title, VoidCallback onTap) {
+    return ListTile(
+      leading: Icon(icon, color: Colors.deepOrange),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
+      trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+      onTap: onTap,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     );
   }
 }

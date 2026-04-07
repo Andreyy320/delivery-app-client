@@ -173,7 +173,11 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Срочная доставка'), backgroundColor: Colors.deepOrange),
+      appBar: AppBar(
+        title: const Text('Срочная доставка'),
+        backgroundColor: Colors.deepOrange,
+        elevation: 0,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -181,64 +185,137 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
             Expanded(
               child: ListView(
                 children: [
+                  // --- ПОЛЕ: ОТКУДА ---
+                  const Text('Откуда забрать', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
                   GestureDetector(
                     onTap: () => _pickLocation(true),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey),
+                        border: Border.all(color: Colors.grey[300]!),
                         borderRadius: BorderRadius.circular(12),
+                        color: Colors.grey[50],
                       ),
-                      child: Text(
-                        _pickupLocation != null
-                            ? '${_pickupLocation!.latitude.toStringAsFixed(5)}, ${_pickupLocation!.longitude.toStringAsFixed(5)}'
-                            : 'Выберите место отправления',
-                        style: TextStyle(color: _pickupLocation != null ? Colors.black : Colors.grey[600]),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.circle, color: Colors.green, size: 12), // Точка отправления
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _pickupLocation != null
+                                  ? 'Координаты: ${_pickupLocation!.latitude.toStringAsFixed(5)}, ${_pickupLocation!.longitude.toStringAsFixed(5)}'
+                                  : 'Выберите место отправления',
+                              style: TextStyle(
+                                  color: _pickupLocation != null ? Colors.black : Colors.grey[600],
+                                  fontSize: 15
+                              ),
+                            ),
+                          ),
+                          const Icon(Icons.map_outlined, color: Colors.grey, size: 20),
+                        ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+
+                  const SizedBox(height: 16),
+
+                  // --- ПОЛЕ: КУДА ---
+                  const Text('Куда доставить', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
                   GestureDetector(
                     onTap: () => _pickLocation(false),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey),
+                        border: Border.all(color: Colors.grey[300]!),
                         borderRadius: BorderRadius.circular(12),
+                        color: Colors.grey[50],
                       ),
-                      child: Text(
-                        _dropoffLocation != null
-                            ? '${_dropoffLocation!.latitude.toStringAsFixed(5)}, ${_dropoffLocation!.longitude.toStringAsFixed(5)}'
-                            : 'Выберите место доставки',
-                        style: TextStyle(color: _dropoffLocation != null ? Colors.black : Colors.grey[600]),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.location_on, color: Colors.deepOrange, size: 18), // Точка доставки
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _dropoffLocation != null
+                                  ? 'Координаты: ${_dropoffLocation!.latitude.toStringAsFixed(5)}, ${_dropoffLocation!.longitude.toStringAsFixed(5)}'
+                                  : 'Выберите место доставки',
+                              style: TextStyle(
+                                  color: _dropoffLocation != null ? Colors.black : Colors.grey[600],
+                                  fontSize: 15
+                              ),
+                            ),
+                          ),
+                          const Icon(Icons.map_outlined, color: Colors.grey, size: 20),
+                        ],
                       ),
                     ),
                   ),
+
                   const SizedBox(height: 24),
-                  const Text('Дополнительные опции:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text('Дополнительные опции', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
                   ...allOptions.map(_buildOptionTile).toList(),
                 ],
               ),
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('К оплате:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                Text('${calculateDeliveryCost()} ₽', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              ],
+
+            // --- НИЖНЯЯ ПАНЕЛЬ С ОПЛАТОЙ ---
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.grey[200]!)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('К оплате:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
+                  Text(
+                      '${calculateDeliveryCost()} ₽',
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black)
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-            SizedBox(
+
+            const SizedBox(height: 8),
+
+            // --- ТА САМАЯ КРАСИВАЯ КНОПКА ---
+            Container(
               width: double.infinity,
+              height: 60,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.deepOrange.withOpacity(0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
               child: ElevatedButton(
                 onPressed: _confirmAndSaveOrder,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.deepOrange,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  foregroundColor: Colors.white, // Текст теперь точно белый
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
-                child: const Text('Подтвердить заказ', style: TextStyle(fontSize: 16)),
+                child: const Text(
+                  'ПОДТВЕРДИТЬ ЗАКАЗ',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
               ),
             ),
+            const SizedBox(height: 10),
           ],
         ),
       ),

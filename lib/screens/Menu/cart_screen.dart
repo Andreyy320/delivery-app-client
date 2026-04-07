@@ -27,9 +27,15 @@ class CartScreen extends StatelessWidget {
     return ValueListenableBuilder<List<CartItem>>(
       valueListenable: cartNotifier,
       builder: (context, cart, _) {
-        final total = cart.fold<double>(
-          0,
-              (sum, item) => sum + item.dish.price * item.quantity,
+        // 1. Считаем сумму, используя num (он точнее работает с целыми и дробными)
+        final double total = cart.fold<double>(
+          0.0,
+              (sum, item) {
+            // Добавляем проверку, чтобы цена или количество не были null
+            final price = item.dish.price ?? 0.0;
+            final quantity = item.quantity ?? 0;
+            return sum + (price * quantity);
+          },
         );
 
         return Scaffold(
@@ -138,35 +144,62 @@ class CartScreen extends StatelessWidget {
                   },
                 ),
               ),
+
               // Секция Итого + кнопки
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(20), // Чуть больше отступов для солидности
                 decoration: BoxDecoration(
                   color: Colors.white,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, -3),
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 15,
+                      offset: const Offset(0, -4),
                     ),
                   ],
                 ),
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     // Итого сверху
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Итого', style: TextStyle(fontSize: 18)),
+                        const Text('Итого', style: TextStyle(fontSize: 18, color: Colors.black)),
                         Text('${total.toStringAsFixed(0)} ₽',
                             style: const TextStyle(
-                                fontSize: 20, fontWeight: FontWeight.bold)),
+                                fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black)),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 20),
                     Row(
                       children: [
-                        // Оформить заказ
+                        // Кнопка ОТМЕНИТЬ
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: cart.isEmpty
+                                ? null
+                                : () {
+                              clearCart(userId, shopId);
+                              cartNotifier.value = List.from(cartNotifier.value);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey[200], // Светло-серый, не агрессивный
+                              foregroundColor: Colors.black87,   // Цвет текста
+                              elevation: 0,                      // Плоская кнопка выглядит современнее
+                              minimumSize: const Size(0, 55),    // Фиксированная высота
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: const Text(
+                              "Отменить",
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // Кнопка ОФОРМИТЬ (Зеленоватая)
                         Expanded(
                           child: ElevatedButton(
                             onPressed: cart.isEmpty
@@ -177,47 +210,23 @@ class CartScreen extends StatelessWidget {
                                 MaterialPageRoute(
                                   builder: (_) => CheckoutScreen(
                                     shopId: shopId ?? '',
-                                    restaurantName:
-                                    restaurantName ?? '',
+                                    restaurantName: restaurantName ?? '',
                                   ),
                                 ),
                               );
                             },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.deepOrange,
-                              minimumSize: const Size(double.infinity, 50),
+                              backgroundColor: Colors.deepOrange, // Красивый зеленый (Emerald)
+                              foregroundColor: Colors.white,            // Белый текст
+                              elevation: 2,
+                              minimumSize: const Size(0, 55),           // Такая же высота!
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
+                                borderRadius: BorderRadius.circular(16),
                               ),
                             ),
                             child: const Text(
-                              'Оформить заказ',
-                              style: TextStyle(fontSize: 16),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        // Отменить заказ (для конкретного магазина или всей корзины)
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: cart.isEmpty
-                                ? null
-                                : () {
-                              clearCart(userId, shopId);
-                              cartNotifier.value =
-                                  List.from(cartNotifier.value);
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.redAccent,
-                              minimumSize: const Size(double.infinity, 50),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                            ),
-                            child: const Text(
-                              "Отменить",
-                              style: TextStyle(
-                                  fontSize: 16, color: Colors.white),
+                              'Оформить',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                             ),
                           ),
                         ),

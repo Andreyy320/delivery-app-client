@@ -142,29 +142,42 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 final selected = _selectedPayment == option['id'];
                 return Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 2), // Уменьшили отступы между кнопками
                     child: GestureDetector(
                       onTap: () => setState(() => _selectedPayment = option['id'] as String),
                       child: Container(
-                        height: 80,
+                        height: 75, // Чуть уменьшили общую высоту
                         decoration: BoxDecoration(
-                          color: selected ? Colors.deepOrange : Colors.grey[200],
-                          borderRadius: BorderRadius.circular(12),
+                          color: selected ? Colors.deepOrange : Colors.grey[100],
+                          borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                              color: selected ? Colors.deepOrange : Colors.grey, width: 1),
+                              color: selected ? Colors.deepOrange : Colors.grey[300]!,
+                              width: 1.5),
                         ),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(option['icon'] as IconData,
-                                color: selected ? Colors.white : Colors.black, size: 28),
-                            const SizedBox(height: 6),
-                            Text(option['label'] as String,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                    color: selected ? Colors.white : Colors.black,
+                            Icon(
+                              option['icon'] as IconData,
+                              color: selected ? Colors.white : Colors.black54,
+                              size: 22, // Уменьшили иконку с 28 до 22
+                            ),
+                            const SizedBox(height: 4),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 2),
+                              child: FittedBox( // 👈 ГЛАВНОЕ: сжимает текст, если он не лезет
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  (option['label'] as String).replaceAll('\n', ' '), // Убираем принудительный перенос
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: selected ? Colors.white : Colors.black87,
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 14)),
+                                    fontSize: 11, // Базовый шрифт чуть меньше
+                                  ),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -189,9 +202,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               child: ElevatedButton(
                 onPressed: _saveOrder,
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepOrange,
-                    padding: const EdgeInsets.symmetric(vertical: 14)),
-                child: const Text('Оформить заказ', style: TextStyle(fontSize: 16)),
+                  // Используем глубокий зеленый цвет для "успешного" действия
+                  backgroundColor: Colors.deepOrange,
+                  foregroundColor: Colors.white,
+                  elevation: 4, // Добавили небольшую тень для объема
+                  shadowColor: Colors.black.withOpacity(0.3),
+                  padding: const EdgeInsets.symmetric(vertical: 18), // Сделали кнопку чуть "толще"
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16), // Более мягкие углы
+                  ),
+                ),
+                child: const Text(
+                    'Оформить заказ',
+                    style: TextStyle(
+                      fontSize: 18, // Шрифт чуть крупнее
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.1, // Небольшой межбуквенный интервал для стиля
+                    )
+                ),
               ),
             ),
           ],
@@ -210,27 +238,99 @@ class OrderConfirmationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Получаем ширину экрана, чтобы делать элементы пропорциональными
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return Scaffold(
-      backgroundColor: Colors.white70,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset('assets/images/zakaz_oformlen.jpg', width: 300, height: 26),
-            const SizedBox(height: 24),
-            const Text('Заказ оформлен!',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
-            const SizedBox(height: 12),
-            const Text('Спасибо за ваш заказ. Курьер скоро доставит его по адресу.',
-                textAlign: TextAlign.center),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              // Закрываем все до главного экрана
-              onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14)),
-              child: const Text('Закрыть'),
-            ),
-          ],
+      backgroundColor: Colors.white, // Чистый белый фон выглядит лучше
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0), // Отступы от краев экрана
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center, // Центрируем всё по вертикали
+            children: [
+              // 1. КАРТИНКА (теперь она видна!)
+              // flexible позволяет картинке сжиматься на маленьких экранах
+              Flexible(
+                flex: 3,
+                child: Image.asset(
+                  'assets/images/zakaz_oformlen.jpg',
+                  width: screenWidth * 0.5, // 50% от ширины экрана
+                  // height: 150, // Высота теперь пропорциональна, убрал жесткие 26
+                  fit: BoxFit.contain, // Сохраняет пропорции картинки
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // 2. ЗАГОЛОВОК
+              const Text(
+                'Заказ оформлен!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 30, // Шрифт крупнее для Samsung A04
+                  fontWeight: FontWeight.bold,
+                  color: Colors.deepOrange,
+                  letterSpacing: 1.1,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // 3. ОПИСАНИЕ
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'Спасибо за ваш заказ.\nКурьер скоро доставит его по адресу.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 17, // Более читабельный размер
+                    color: Colors.grey[700],
+                    height: 1.4, // Межстрочный интервал для легкого чтения
+                  ),
+                ),
+              ),
+
+              // 4. ПРОСТРАНСТВО ДО КНОПКИ
+              const Spacer(flex: 2), // Толкает кнопку вниз, оставляя место сверху
+
+              // 5. КНОПКА (теперь большая и красивая)
+              Container(
+                width: double.infinity, // На всю ширину
+                height: 60, // Фиксированная удобная высота
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    // Красивое оранжевое "свечение"
+                    BoxShadow(
+                      color: Colors.deepOrange.withOpacity(0.3),
+                      blurRadius: 15,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: ElevatedButton(
+                  // Закрываем все до главного экрана
+                  onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepOrange,
+                    foregroundColor: Colors.white,
+                    elevation: 0, // Тень мы уже сделали через Container
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: const Text(
+                    'ВЕРНУТЬСЯ В МЕНЮ',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16), // Отступ от самого низа экрана
+            ],
+          ),
         ),
       ),
     );
@@ -252,46 +352,94 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Выберите адрес'),
-          backgroundColor: Colors.deepOrange),
+      appBar: AppBar(
+        title: const Text('Выберите адрес', style: TextStyle(color: Colors.black)),
+        backgroundColor: Colors.deepOrange,
+        iconTheme: const IconThemeData(color: Colors.black), // Стрелочка назад тоже белая
+      ),
       body: Stack(
         children: [
           FlutterMap(
             mapController: mapController,
             options: MapOptions(
-              initialCenter: LatLng(46.8410, 29.6470),
+              initialCenter: const LatLng(46.8410, 29.6470),
               initialZoom: 16,
-              onTap: (tapPos, latLng) =>
-                  setState(() => selectedLatLng = latLng),
+              onTap: (tapPos, latLng) => setState(() => selectedLatLng = latLng),
             ),
             children: [
               TileLayer(
                 urlTemplate: 'https://{s}.tile.openstreetmap.de/{z}/{x}/{y}.png',
-                subdomains: ['a', 'b', 'c'],
+                subdomains: const ['a', 'b', 'c'],
                 userAgentPackageName: 'com.example.app',
               ),
               if (selectedLatLng != null)
                 MarkerLayer(
                   markers: [
-                    Marker(point: selectedLatLng!,
-                        width: 40,
-                        height: 40,
-                        child: const Icon(
-                            Icons.location_on, color: Colors.red, size: 40))
+                    Marker(
+                      point: selectedLatLng!,
+                      width: 50,
+                      height: 50,
+                      child: const Icon(
+                        Icons.location_on,
+                        color: Colors.red,
+                        size: 50,
+                        // Тень для маркера, чтобы он не терялся
+                        shadows: [Shadow(color: Colors.white, blurRadius: 8)],
+                      ),
+                    ),
                   ],
                 ),
             ],
           ),
+
+          // КНОПКА ТУТ
           if (selectedLatLng != null)
             Positioned(
-              bottom: 20,
-              left: 16,
-              right: 16,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepOrange),
-                onPressed: () => Navigator.pop(context, selectedLatLng),
-                child: const Text('Выбрать этот адрес'),
+              bottom: 30, // Чуть выше, чтобы не мешала системная полоса снизу
+              left: 20,
+              right: 20,
+              child: SizedBox(
+                height: 60, // Делаем кнопку высокой и удобной
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepOrange, // Твой оранжевый цвет
+                    foregroundColor: Colors.white,  // БЕЛЫЙ ЦВЕТ ТЕКСТА (теперь нормальный)
+                    elevation: 8,                  // Тень кнопки
+                    shadowColor: Colors.orange.withOpacity(0.5), // Оранжевое свечение тени
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16), // Скругленные углы
+                    ),
+                  ),
+                  onPressed: () => Navigator.pop(context, selectedLatLng),
+                  child: const Text(
+                    'ПОДТВЕРДИТЬ АДРЕС',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold, // Жирный шрифт
+                      letterSpacing: 1.2,          // Красивое расстояние между буквами
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          // Подсказка, если еще ничего не выбрали
+          if (selectedLatLng == null)
+            Positioned(
+              top: 20,
+              left: 60,
+              right: 60,
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(25),
+                ),
+                child: const Text(
+                  'Нажмите на карту',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                ),
               ),
             ),
         ],

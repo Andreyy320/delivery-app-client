@@ -104,98 +104,134 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.black.withOpacity(0.5),
+      backgroundColor: Colors.transparent, // Чтобы было видно скругление углов
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Container(
-              height: 350,
-              padding: const EdgeInsets.all(16),
+              height: 420, // Немного увеличили для комфорта
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: const BoxDecoration(
                 color: Colors.white,
-                borderRadius:
-                BorderRadius.vertical(top: Radius.circular(20)),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
               child: Column(
                 children: [
+                  // 1. ИНДИКАТОР СВЕРХУ (Symmetry handle)
+                  Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 16, top: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
                         'Выберите время',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close),
+                        icon: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(color: Colors.grey[100], shape: BoxShape.circle),
+                          child: const Icon(Icons.close, size: 20, color: Colors.black),
+                        ),
                         onPressed: () => Navigator.pop(context),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+
+                  const SizedBox(height: 10),
+
+                  // 2. ВЫБОР ВРЕМЕНИ (Cupertino Style)
                   Expanded(
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: CupertinoPicker(
-                            itemExtent: 40,
-                            scrollController:
-                            FixedExtentScrollController(initialItem: selectedDayIndex),
-                            onSelectedItemChanged: (index) {
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: [
+                          _buildPicker(
+                            initialItem: selectedDayIndex,
+                            items: days.map((d) => d).toList(),
+                            onChanged: (index) {
                               setModalState(() => selectedDayIndex = index);
                               setState(() => timeSelected = true);
                             },
-                            children: days.map((d) => Center(child: Text(d))).toList(),
                           ),
-                        ),
-                        Expanded(
-                          child: CupertinoPicker(
-                            itemExtent: 40,
-                            scrollController:
-                            FixedExtentScrollController(initialItem: selectedHour),
-                            onSelectedItemChanged: (index) {
+                          _buildPicker(
+                            initialItem: selectedHour,
+                            items: List.generate(24, (i) => '$i ч'),
+                            onChanged: (index) {
                               setModalState(() => selectedHour = index);
                               setState(() => timeSelected = true);
                             },
-                            children: List.generate(24, (index) => Center(child: Text('$index ч'))),
                           ),
-                        ),
-                        Expanded(
-                          child: CupertinoPicker(
-                            itemExtent: 40,
-                            scrollController:
-                            FixedExtentScrollController(initialItem: selectedMinute),
-                            onSelectedItemChanged: (index) {
+                          _buildPicker(
+                            initialItem: selectedMinute,
+                            items: List.generate(60, (i) => '${i.toString().padLeft(2, '0')} мин'),
+                            onChanged: (index) {
                               setModalState(() => selectedMinute = index);
                               setState(() => timeSelected = true);
                             },
-                            children: List.generate(
-                                60, (index) => Center(child: Text('$index мин'))),
                           ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Текущий выбор
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.deepOrange.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      'Выбрано: ${days[selectedDayIndex]}, ${selectedHour.toString().padLeft(2, '0')}:${selectedMinute.toString().padLeft(2, '0')}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // 3. ТА САМАЯ КНОПКА
+                  Container(
+                    width: double.infinity,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.deepOrange.withOpacity(0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Выбрано: ${days[selectedDayIndex]}, ${selectedHour.toString().padLeft(2, '0')}:${selectedMinute.toString().padLeft(2, '0')}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.deepOrange,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       ),
                       onPressed: () => Navigator.pop(context),
                       child: const Text(
-                        'ДАЛЕЕ',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        'ГОТОВО',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2),
                       ),
                     ),
-                  )
+                  ),
+                  const SizedBox(height: 12),
                 ],
               ),
             );
@@ -205,18 +241,49 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
     );
   }
 
+// Вспомогательный метод для чистого кода пикера
+  Widget _buildPicker({required int initialItem, required List<String> items, required ValueChanged<int> onChanged}) {
+    return Expanded(
+      child: CupertinoPicker(
+        itemExtent: 40,
+        magnification: 1.2,
+        useMagnifier: true,
+        scrollController: FixedExtentScrollController(initialItem: initialItem),
+        onSelectedItemChanged: onChanged,
+        children: items.map((text) => Center(
+          child: Text(
+            text,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w400),
+          ),
+        )).toList(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
-      appBar: AppBar(
-        backgroundColor: Colors.deepOrange,
-        title: const Text(
-          'Грузоперевозка по городу',
-          style: TextStyle(color: Colors.black),
+        appBar: AppBar(
+          backgroundColor: Colors.deepOrange,
+          elevation: 0,
+          centerTitle: true,
+          // Делаем иконку "Назад" белой
+          iconTheme: const IconThemeData(color: Colors.black),
+          title: SizedBox(
+            width: MediaQuery.of(context).size.width * 0.7, // Ограничиваем ширину, чтобы не наезжать на иконки
+            child: const FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'Грузоперевозка по городу',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 20, // Базовый размер, который будет сжиматься
+                ),
+              ),
+            ),
+          ),
         ),
-        iconTheme: const IconThemeData(color: Colors.black),
-      ),
       body: Column(
         children: [
           Expanded(
@@ -256,9 +323,8 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Подача',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold),
+                          'Детали подачи',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 22),
                         _AddressField(
@@ -266,62 +332,52 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
                           controller: fromController,
                           onTap: () => _openMap(fromController),
                         ),
-                        const SizedBox(height: 22),
+                        const SizedBox(height: 16),
                         _AddressField(
                           label: 'Куда',
                           controller: toController,
                           onTap: () => _openMap(toController),
                         ),
-                        const SizedBox(height: 35),
-                        GestureDetector(
+                        const SizedBox(height: 24),
+
+                        // Блок времени
+                        InkWell(
                           onTap: _showTimePickerSheet,
+                          borderRadius: BorderRadius.circular(12),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                            decoration: BoxDecoration(
+                              color: timeSelected ? Colors.orange.withOpacity(0.05) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                             child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text(
-                                  'Заказать по времени',
-                                  style: TextStyle(
-                                      fontSize: 17, fontWeight: FontWeight.bold),
-                                ),
-                                Container(
-                                  width: 24,
-                                  height: 24,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.grey),
+                                Icon(Icons.access_time, color: timeSelected ? Colors.deepOrange : Colors.grey),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    timeSelected
+                                        ? 'Время: ${days[selectedDayIndex]}, ${selectedHour.toString().padLeft(2, '0')}:${selectedMinute.toString().padLeft(2, '0')}'
+                                        : 'Заказать ко времени',
+                                    style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: timeSelected ? FontWeight.bold : FontWeight.normal,
+                                        color: timeSelected ? Colors.black : Colors.grey[700]
+                                    ),
                                   ),
-                                  child: timeSelected
-                                      ? const Icon(
-                                    Icons.check,
-                                    size: 16,
-                                    color: Colors.deepOrange,
-                                  )
-                                      : null,
                                 ),
+                                if (timeSelected)
+                                  IconButton(
+                                    icon: const Icon(Icons.close, color: Colors.red, size: 20),
+                                    onPressed: () => setState(() => timeSelected = false),
+                                  )
+                                else
+                                  const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
                               ],
                             ),
                           ),
                         ),
-                        if (timeSelected)
-                          TextButton.icon(
-                            onPressed: () {
-                              setState(() {
-                                timeSelected = false;
-                              });
-                            },
-                            icon: const Icon(Icons.close, color: Colors.red),
-                            label: const Text('Отменить заказ по времени'),
-                          ),
-                        const SizedBox(height: 18),
-                        Text(
-                          timeSelected
-                              ? 'Выбрано: ${days[selectedDayIndex]}, ${selectedHour.toString().padLeft(2, '0')}:${selectedMinute.toString().padLeft(2, '0')}'
-                              : 'Время не выбрано',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 80),
+                        const SizedBox(height: 20),
                       ],
                     ),
                   ),
@@ -329,83 +385,103 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
               ),
             ),
           ),
-          // ======= БЛОК СТОИМОСТИ ВНИЗУ =======
+
+          // ======= КРАСИВАЯ НИЖНЯЯ ПАНЕЛЬ =======
           Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.white,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Стоимость',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32), // Увеличен отступ снизу
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 20,
+                  offset: const Offset(0, -5),
                 ),
-                Text(
-                  '${_calculatePrice()} ₽',
-                  style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.deepOrange),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Итого к оплате:',
+                      style: TextStyle(fontSize: 16, color: Colors.black),
+                    ),
+                    Text(
+                      '${_calculatePrice()} ₽',
+                      style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 60,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.deepOrange.withOpacity(0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.deepOrange,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      onPressed: () {
+                        DateTime? scheduledTimeValue = timeSelected
+                            ? DateTime.now()
+                            .add(Duration(days: selectedDayIndex))
+                            .copyWith(hour: selectedHour, minute: selectedMinute)
+                            : null;
+
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => GorodOrderConfirmationScreen(
+                              fromAddress: fromController.text,
+                              toAddress: toController.text,
+                              bodySize: selectedBody,
+                              loaders: loaders,
+                              escort: escort,
+                              timeSelected: timeSelected,
+                              scheduledTime: scheduledTimeValue,
+                              totalPrice: _calculatePrice(),
+                            ),
+                          ),
+                        );
+                      },
+                      child: const Text(
+                        'ЗАКАЗАТЬ МАШИНУ',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
         ],
       ),
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border(
-            top: BorderSide(color: Colors.grey[300]!, width: 1),
-          ),
-        ),
-        child: SizedBox(
-          height: 50,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepOrange,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            onPressed: () {
-              // Формируем scheduledTime, если выбрано
-              DateTime? scheduledTimeValue = timeSelected
-                  ? DateTime.now()
-                  .add(Duration(days: selectedDayIndex))
-                  .copyWith(hour: selectedHour, minute: selectedMinute)
-                  : null;
-
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => GorodOrderConfirmationScreen(
-                    fromAddress: fromController.text,
-                    toAddress: toController.text,
-                    bodySize: selectedBody,
-                    loaders: loaders,
-                    escort: escort,
-                    timeSelected: timeSelected,
-                    scheduledTime: scheduledTimeValue,
-                    totalPrice: _calculatePrice(), // <-- вот здесь добавили цену
-                  ),
-                ),
-              );
-            },
-            child: const Text(
-              'Заказать',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ),
-      ),
-
-
     );
   }
 
@@ -551,13 +627,21 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Выберите адрес'), backgroundColor: Colors.deepOrange),
+      appBar: AppBar(
+        title: const Text('Выберите адрес',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.deepOrange,
+        iconTheme: const IconThemeData(color: Colors.white),
+        // Стрелочка назад теперь белая
+        elevation: 0,
+      ),
       body: Stack(
         children: [
+          // 1. КАРТА
           FlutterMap(
             mapController: mapController,
             options: MapOptions(
-              initialCenter: LatLng(46.8410, 29.6470),
+              initialCenter: const LatLng(46.8410, 29.6470),
               initialZoom: 16,
               onTap: (tapPosition, latLng) {
                 setState(() {
@@ -568,7 +652,7 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
             children: [
               TileLayer(
                 urlTemplate: 'https://{s}.tile.openstreetmap.de/{z}/{x}/{y}.png',
-                subdomains: ['a', 'b', 'c'],
+                subdomains: const ['a', 'b', 'c'],
                 userAgentPackageName: 'com.example.app',
               ),
               if (selectedLatLng != null)
@@ -576,25 +660,86 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                   markers: [
                     Marker(
                       point: selectedLatLng!,
-                      width: 40,
-                      height: 40,
-                      child: const Icon(Icons.location_on, color: Colors.red, size: 40),
+                      width: 50,
+                      height: 50,
+                      child: const Icon(
+                        Icons.location_on,
+                        color: Colors.red,
+                        size: 50,
+                        shadows: [
+                          Shadow(color: Colors.white, blurRadius: 10)
+                        ], // Чтобы маркер выделялся
+                      ),
                     ),
                   ],
                 ),
             ],
           ),
+
+          // 2. ПОДСКАЗКА СВЕРХУ (появляется, если адрес не выбран)
+          if (selectedLatLng == null)
+            Positioned(
+              top: 20,
+              left: 40,
+              right: 40,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    vertical: 10, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withOpacity(0.1), blurRadius: 10)
+                  ],
+                ),
+                child: const Text(
+                  'Нажмите на карту, чтобы выбрать место',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ),
+
+          // 3. ТА САМАЯ КНОПКА (появляется после тапа)
           if (selectedLatLng != null)
             Positioned(
-              bottom: 20,
-              left: 16,
-              right: 16,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange),
-                onPressed: () {
-                  Navigator.pop(context, selectedLatLng);
-                },
-                child: const Text('Выбрать этот адрес'),
+              bottom: 30, // Чуть выше от края для удобства
+              left: 20,
+              right: 20,
+              child: Container(
+                height: 60,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.deepOrange.withOpacity(0.3),
+                      blurRadius: 15,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepOrange,
+                    foregroundColor: Colors.white, // БЕЛЫЙ ТЕКСТ
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context, selectedLatLng);
+                  },
+                  child: const Text(
+                    'ПОДТВЕРДИТЬ ЭТОТ АДРЕС',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.1
+                    ),
+                  ),
+                ),
               ),
             ),
         ],

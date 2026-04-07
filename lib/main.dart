@@ -4,8 +4,14 @@ import 'package:untitled1/screens/register_and_vhod/notification_service.dart';
 import 'firebase_options.dart';
 import 'screens/main_screen.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'dart:io';
+
 
 void main() async {
+
+  // 🔹 ДОБАВЬ ЭТУ СТРОЧКУ ПЕРВОЙ
+  HttpOverrides.global = MyHttpOverrides();
+
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
 
@@ -35,5 +41,15 @@ class MyApp extends StatelessWidget {
       ),
       home: const MainScreen(),
     );
+  }
+
+
+}
+
+class MyHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
   }
 }

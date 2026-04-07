@@ -24,10 +24,12 @@ class UserStorage {
       password: password,
     );
 
+    // ЗАПИСЬ В FIRESTORE
     await _firestore.collection('users').doc(cred.user!.uid).set({
       'name': name,
       'phone': phone,
-      'email': email, // сохраняем настоящую почту
+      'email': email,
+      'role': 'client', // <--- ВОТ ЭТА СТРОЧКА (теперь юзер всегда клиент)
       'createdAt': FieldValue.serverTimestamp(),
     });
   }

@@ -293,10 +293,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 ElevatedButton.icon(
                   onPressed: () => _repeatOrder(order),
-                  icon: const Icon(Icons.restart_alt, color: Colors.white),
+                  icon: const Icon(Icons.restart_alt, color: Colors.white), // Иконка уже белая
                   label: const Text('Повторить'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.deepOrange,
+                    foregroundColor: Colors.white, // <--- ДОБАВЬ ЭТУ СТРОКУ (сделает текст белым)
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   ),

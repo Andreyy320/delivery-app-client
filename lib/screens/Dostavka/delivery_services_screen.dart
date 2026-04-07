@@ -3,6 +3,7 @@ import 'package:untitled1/screens/Dostavka/Gorod.dart';
 import 'package:untitled1/screens/Dostavka/MejGorod.dart';
 import 'package:untitled1/screens/Dostavka/courier_express_screen.dart';
 
+
 class DeliveryServicesScreen extends StatelessWidget {
   const DeliveryServicesScreen({super.key});
 
@@ -12,15 +13,14 @@ class DeliveryServicesScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Доставка'),
         backgroundColor: Colors.deepOrange,
-        centerTitle: true, // <-- добавили, чтобы заголовок был по центру
-
+        centerTitle: true,
+        elevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
             /// ===== КУРЬЕР =====
             const _SectionTitle(title: 'Курьер'),
             const SizedBox(height: 12),
@@ -31,14 +31,14 @@ class DeliveryServicesScreen extends StatelessWidget {
               physics: const NeverScrollableScrollPhysics(),
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              childAspectRatio: 1,
+              childAspectRatio: 1, // 👈 Сделали карточку выше (было 1)
               children: const [
                 _ServiceCard(
-                title: 'Срочная доставка',
-                subtitle: 'Как можно быстрее',
-                icon: Icons.flash_on,
-                screen: ExpressDeliveryScreen(),
-              ),
+                  title: 'Срочная доставка',
+                  subtitle: 'Как можно быстрее',
+                  icon: Icons.flash_on,
+                  screen: ExpressDeliveryScreen(),
+                ),
               ],
             ),
 
@@ -54,19 +54,20 @@ class DeliveryServicesScreen extends StatelessWidget {
               physics: const NeverScrollableScrollPhysics(),
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              childAspectRatio: 1,
-              children: const [ _ServiceCard(
-                title: 'По городу',
-                subtitle: 'Срочно или в удобное время',
-                icon: Icons.local_shipping,
-                screen: CityCargoDetailsScreen(),
-              ),
-              const _ServiceCard(
-                title: 'Межгород',
-                subtitle: 'Дальние перевозки',
-                icon: Icons.fire_truck,
-                screen: MejCityCargoDetailsScreen(),
-              ),
+              childAspectRatio: 1, // 👈 И тут тоже 0.85
+              children: const [
+                _ServiceCard(
+                  title: 'По городу',
+                  subtitle: 'Срочно или в удобное время',
+                  icon: Icons.local_shipping,
+                  screen: CityCargoDetailsScreen(),
+                ),
+                _ServiceCard(
+                  title: 'Межгород',
+                  subtitle: 'Дальние перевозки',
+                  icon: Icons.fire_truck,
+                  screen: MejCityCargoDetailsScreen(),
+                ),
               ],
             ),
           ],
@@ -81,7 +82,6 @@ class DeliveryServicesScreen extends StatelessWidget {
 /// ===================
 class _SectionTitle extends StatelessWidget {
   final String title;
-
   const _SectionTitle({required this.title});
 
   @override
@@ -103,7 +103,7 @@ class _ServiceCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final IconData icon;
-  final Widget screen; // 👈 ВАЖНО
+  final Widget screen;
 
   const _ServiceCard({
     required this.title,
@@ -115,57 +115,57 @@ class _ServiceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => screen),
-        );
-      },
-        child: Container(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => screen)),
+      child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 5),
             ),
           ],
         ),
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center, // Собираем всё в центре
           children: [
+            // Иконка в нежном круге
             Container(
-              padding: const EdgeInsets.all(14),
+              width: 54,
+              height: 54,
               decoration: BoxDecoration(
-                color: Colors.deepOrange.withOpacity(0.15),
+                color: Colors.deepOrange.withOpacity(0.08),
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                icon,
-                size: 32,
-                color: Colors.deepOrange,
-              ),
+              child: Icon(icon, size: 28, color: Colors.deepOrange),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14), // Фиксированный отступ
+
+            // Заголовок
             Text(
               title,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                fontSize: 16,
                 fontWeight: FontWeight.bold,
+                fontSize: 15,
+                color: Colors.black87,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4), // Маленький отступ до подзаголовка
+
+            // Подзаголовок
             Text(
               subtitle,
               textAlign: TextAlign.center,
+              maxLines: 2,
               style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
+                fontSize: 11,
+                color: Colors.grey[500],
+                height: 1.2,
               ),
             ),
           ],

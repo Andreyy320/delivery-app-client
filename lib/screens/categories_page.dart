@@ -30,7 +30,6 @@ class CategoriesPage extends StatelessWidget {
   const CategoriesPage({super.key, required this.addToCart});
 
   void openCategory(BuildContext context, String title) {
-
     Widget screen;
     switch (title) {
       case 'Еда':
@@ -49,18 +48,15 @@ class CategoriesPage extends StatelessWidget {
         screen = ProductScreen(addToCart: addToCart);
         break;
       case 'Доставка':
-      // 👇 ПРОСТО PUSH, БЕЗ МЕНЮ СНИЗУ
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => DeliveryServicesScreen(), // ← твой экран доставки
+            builder: (_) => DeliveryServicesScreen(),
           ),
         );
-        return; // ❗ ОБЯЗАТЕЛЬНО, чтобы дальше не выполнялось
-
+        return;
       default:
         return;
     }
-
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
 
@@ -70,6 +66,7 @@ class CategoriesPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Верхняя панель с градиентом
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -90,6 +87,7 @@ class CategoriesPage extends StatelessWidget {
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
           ),
           const SizedBox(height: 16),
+          // Сетка категорий
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -99,7 +97,7 @@ class CategoriesPage extends StatelessWidget {
                   crossAxisCount: 2,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
-                  childAspectRatio: 1.3,
+                  childAspectRatio: 1.4, // Немного увеличили высоту карточки
                 ),
                 itemBuilder: (context, index) {
                   final category = categories[index];
@@ -107,24 +105,27 @@ class CategoriesPage extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                     onTap: () => openCategory(context, category.title),
                     child: Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: category.color.withOpacity(0.12),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center, // Центрируем всё по вертикали
                         children: [
-                          const SizedBox(height: 16),
-                          Align(
-                            alignment: const Alignment(-0.2, 0),
-                            child: Icon(category.icon, size: 32, color: category.color),
-                          ),
-                          const SizedBox(height: 25),
-                          Align(
-                            alignment: const Alignment(-0.2, 0),
-                            child: Text(category.title,
-                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          Icon(category.icon, size: 36, color: category.color),
+                          const SizedBox(height: 12),
+                          // Этот блок не дает тексту вылезать за границы
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              category.title,
+                              style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87
+                              ),
+                            ),
                           ),
                         ],
                       ),
