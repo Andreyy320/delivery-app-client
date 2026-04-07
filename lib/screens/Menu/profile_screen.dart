@@ -72,6 +72,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
+              // 🎯 ДОБАВЛЕНО: Центрирует все элементы внутри колонки по горизонтали
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 // Логотип или иконка приложения
                 Container(
@@ -85,13 +87,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 24),
                 const Text(
                   'Добро пожаловать!',
+                  textAlign: TextAlign.center, // Явно центрируем текст внутри виджета
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 const Text(
                   'Войдите, чтобы управлять заказами',
                   style: TextStyle(color: Colors.grey, fontSize: 16),
-                  textAlign: TextAlign.center,
+                  textAlign: TextAlign.center, // Текст подзаголовка тоже по центру
                 ),
                 const SizedBox(height: 48),
 
@@ -197,19 +200,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     name,
                     style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  const SizedBox(height: 12),
+
+                  // --- ИСПРАВЛЕННЫЙ БЛОК КОНТАКТОВ ---
+                  Column(
                     children: [
-                      const Icon(Icons.phone, color: Colors.white70, size: 14),
-                      const SizedBox(width: 6),
-                      Text(phone, style: const TextStyle(color: Colors.white70)),
-                      const SizedBox(width: 16),
-                      const Icon(Icons.email, color: Colors.white70, size: 14),
-                      const SizedBox(width: 6),
-                      Text(email, style: const TextStyle(color: Colors.white70)),
+                      // Строка с телефоном
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.phone, color: Colors.white70, size: 14),
+                          const SizedBox(width: 6),
+                          Text(phone, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                        ],
+                      ),
+                      const SizedBox(height: 8), // Отступ между телефоном и почтой
+                      // Строка с почтой
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.email, color: Colors.white70, size: 14),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              email,
+                              style: const TextStyle(color: Colors.white70, fontSize: 14),
+                              overflow: TextOverflow.ellipsis, // Защита от очень длинных почт
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
+                  // ----------------------------------
                 ],
               ),
             ),

@@ -51,6 +51,7 @@ class _LoginScreenState extends State<LoginScreen> {
         centerTitle: true,
         backgroundColor: Colors.deepOrange,
         elevation: 0,
+        // Белая иконка "Назад"
         iconTheme: const IconThemeData(color: Colors.black),
       ),
       body: SingleChildScrollView(
@@ -59,10 +60,21 @@ class _LoginScreenState extends State<LoginScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 20),
-            const Text(
-              'С возвращением!',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+
+            // 🎯 ИСПРАВЛЕННЫЙ ЗАГОЛОВОК:
+            // FittedBox не даст тексту порваться на две строки на Samsung A04
+            const SizedBox(
+              width: double.infinity,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'С возвращением!',
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                ),
+              ),
             ),
+
             const SizedBox(height: 8),
             Text(
               'Введите данные для входа в систему',
@@ -101,7 +113,7 @@ class _LoginScreenState extends State<LoginScreen> {
             // КНОПКА ВОЙТИ
             Container(
               width: double.infinity,
-              height: 60, // Увеличенная высота для удобства на Samsung A04
+              height: 60,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [

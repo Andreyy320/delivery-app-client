@@ -22,25 +22,22 @@ class DeliveryServicesScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             /// ===== КУРЬЕР =====
+            /// ===== КУРЬЕР =====
             const _SectionTitle(title: 'Курьер'),
             const SizedBox(height: 12),
 
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1, // 👈 Сделали карточку выше (было 1)
-              children: const [
-                _ServiceCard(
-                  title: 'Срочная доставка',
-                  subtitle: 'Как можно быстрее',
-                  icon: Icons.flash_on,
-                  screen: ExpressDeliveryScreen(),
-                ),
-              ],
+// Вместо GridView используем это:
+            const SizedBox(
+              width: double.infinity, // Растягиваем на всю ширину
+              child: _ServiceCard(
+                title: 'Срочная доставка',
+                subtitle: 'Как можно быстрее',
+                icon: Icons.flash_on,
+                screen: ExpressDeliveryScreen(),
+              ),
             ),
+
+            const SizedBox(height: 28),
 
             const SizedBox(height: 28),
 
