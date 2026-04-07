@@ -158,35 +158,46 @@ class _MejCityCargoDetailsScreenState extends State<MejCityCargoDetailsScreen> {
                       ),
                       child: Row(
                         children: [
-                          _buildPicker(
-                            initialItem: selectedDayIndex,
-                            items: days.map((d) => d).toList(),
-                            onChanged: (index) {
-                              setModalState(() => selectedDayIndex = index);
-                              setState(() => timeSelected = true);
-                            },
+                          // Дни (даем больше места через Expanded flex)
+                          Expanded(
+                            flex: 2, // 🎯 Занимает 50% ширины ряда
+                            child: _buildPicker(
+                              initialItem: selectedDayIndex,
+                              items: days.map((d) => d).toList(),
+                              onChanged: (index) {
+                                setModalState(() => selectedDayIndex = index);
+                                setState(() => timeSelected = true);
+                              },
+                            ),
                           ),
-                          _buildPicker(
-                            initialItem: selectedHour,
-                            items: List.generate(24, (i) => '$i ч'),
-                            onChanged: (index) {
-                              setModalState(() => selectedHour = index);
-                              setState(() => timeSelected = true);
-                            },
+                          // Часы
+                          Expanded(
+                            flex: 1, // 🎯 Занимает 25%
+                            child: _buildPicker(
+                              initialItem: selectedHour,
+                              items: List.generate(24, (i) => '$i ч'),
+                              onChanged: (index) {
+                                setModalState(() => selectedHour = index);
+                                setState(() => timeSelected = true);
+                              },
+                            ),
                           ),
-                          _buildPicker(
-                            initialItem: selectedMinute,
-                            items: List.generate(60, (i) => '${i.toString().padLeft(2, '0')} мин'),
-                            onChanged: (index) {
-                              setModalState(() => selectedMinute = index);
-                              setState(() => timeSelected = true);
-                            },
+                          // Минуты
+                          Expanded(
+                            flex: 1, // 🎯 Занимает 25%
+                            child: _buildPicker(
+                              initialItem: selectedMinute,
+                              items: List.generate(60, (i) => '${i.toString().padLeft(2, '0')} м'), // Сократил "мин" до "м" для экономии места
+                              onChanged: (index) {
+                                setModalState(() => selectedMinute = index);
+                                setState(() => timeSelected = true);
+                              },
+                            ),
                           ),
                         ],
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 16),
 
                   // Текущий выбор
@@ -243,21 +254,27 @@ class _MejCityCargoDetailsScreenState extends State<MejCityCargoDetailsScreen> {
   }
 
 // Вспомогательный метод для чистого кода пикера
-  Widget _buildPicker({required int initialItem, required List<String> items, required ValueChanged<int> onChanged}) {
-    return Expanded(
-      child: CupertinoPicker(
-        itemExtent: 40,
-        magnification: 1.2,
-        useMagnifier: true,
-        scrollController: FixedExtentScrollController(initialItem: initialItem),
-        onSelectedItemChanged: onChanged,
-        children: items.map((text) => Center(
-          child: Text(
-            text,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w400),
+  Widget _buildPicker({
+    required int initialItem,
+    required List<String> items,
+    required ValueChanged<int> onChanged,
+  }) {
+    return CupertinoPicker(
+      scrollController: FixedExtentScrollController(initialItem: initialItem),
+      itemExtent: 40,
+      onSelectedItemChanged: onChanged,
+      children: items.map((item) => Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: FittedBox( // 🎯 Сжимает текст "Послезавтра", если он всё равно не влез
+            fit: BoxFit.scaleDown,
+            child: Text(
+              item,
+              style: const TextStyle(fontSize: 18),
+            ),
           ),
-        )).toList(),
-      ),
+        ),
+      )).toList(),
     );
   }
 
@@ -549,34 +566,50 @@ class _MejCityCargoDetailsScreenState extends State<MejCityCargoDetailsScreen> {
     required String title,
     required List<String> options,
     required String selected,
-    required Function(String) onSelect,
+    required ValueChanged<String> onSelect,
   }) {
     return Row(
       children: [
         Expanded(
-          child: Text(title,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          flex: 1,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+                title,
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)
+            ),
+          ),
         ),
-        Row(
-          children: options.map((opt) {
-            final isSelected = opt == selected;
-            return GestureDetector(
-              onTap: () => onSelect(opt),
-              child: Container(
-                margin: const EdgeInsets.only(left: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isSelected ? Colors.deepOrange : Colors.grey[200],
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  opt,
-                  style: TextStyle(
-                      color: isSelected ? Colors.white : Colors.black, fontWeight: FontWeight.bold),
-                ),
-              ),
-            );
-          }).toList(),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 2, // Даем больше места кнопкам выбора
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: options.map((opt) {
+                bool isSelected = selected == opt;
+                return GestureDetector(
+                  onTap: () => onSelect(opt),
+                  child: Container(
+                    margin: const EdgeInsets.only(left: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.deepOrange : Colors.grey[200],
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      opt,
+                      style: TextStyle(
+                          color: isSelected ? Colors.white : Colors.black,
+                          fontWeight: FontWeight.bold
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
         ),
       ],
     );
@@ -586,8 +619,16 @@ class _MejCityCargoDetailsScreenState extends State<MejCityCargoDetailsScreen> {
     return Row(
       children: [
         Expanded(
-          child: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+                title,
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)
+            ),
+          ),
         ),
+        const SizedBox(width: 8), // Зазор, чтобы текст не лип к кнопкам
         Row(
           children: List.generate(3, (index) {
             final isSelected = value == index;
@@ -602,7 +643,10 @@ class _MejCityCargoDetailsScreenState extends State<MejCityCargoDetailsScreen> {
                 ),
                 child: Text(
                   index == 0 ? 'НЕТ' : index.toString(),
-                  style: TextStyle(color: isSelected ? Colors.white : Colors.black, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.black,
+                      fontWeight: FontWeight.bold
+                  ),
                 ),
               ),
             );
@@ -610,8 +654,7 @@ class _MejCityCargoDetailsScreenState extends State<MejCityCargoDetailsScreen> {
         ),
       ],
     );
-  }
-}
+  }}
 
 // ======= Экран выбора локации =======
 class SelectLocationScreen extends StatefulWidget {

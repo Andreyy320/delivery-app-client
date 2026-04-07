@@ -133,7 +133,7 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
     }
   }
 
-  // Виджет для опций
+  // Виджет для опций (ИСПРАВЛЕННЫЙ)
   Widget _buildOptionTile(String optId) {
     bool isSelected = selectedOptions.contains(optId);
     return GestureDetector(
@@ -150,19 +150,36 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isSelected ? Colors.deepOrange : Colors.grey),
+          // Сделаем границу чуть тоньше, чтобы визуально было легче
+          border: Border.all(
+            color: isSelected ? Colors.deepOrange : Colors.grey[300]!,
+            width: isSelected ? 2 : 1,
+          ),
+          color: isSelected ? Colors.deepOrange.withOpacity(0.05) : Colors.white,
         ),
         child: Row(
           children: [
+            // 🎯 ТЕПЕРЬ ТЕКСТ ВСЕГДА В ОДНУ СТРОКУ
             Expanded(
-              child: Text(
-                '${optionTitles[optId]} ${optionPrices[optId]! > 0 ? "(+${optionPrices[optId]} ₽)" : ""}',
-                style: const TextStyle(fontSize: 16),
+              child: FittedBox(
+                fit: BoxFit.scaleDown, // Сжимает текст, если он не влезает
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${optionTitles[optId]} ${optionPrices[optId]! > 0 ? "(+${optionPrices[optId]} ₽)" : ""}',
+                  style: TextStyle(
+                    fontSize: 16,
+                    // Если выбрано — делаем текст жирнее
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: isSelected ? Colors.black : Colors.black87,
+                  ),
+                ),
               ),
             ),
+            const SizedBox(width: 8), // Зазор перед иконкой
             Icon(
               isSelected ? Icons.check_circle : Icons.circle_outlined,
               color: isSelected ? Colors.deepOrange : Colors.grey,
+              size: 24,
             ),
           ],
         ),
