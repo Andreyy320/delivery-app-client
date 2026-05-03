@@ -196,7 +196,7 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
             )
           else
             _buildProgressBar(steps, icons, labels, themeColor),
-          Text('${order.total.toInt()} MDL', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+          Text('${order.total.toInt()} Руб', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
         ],
       ),
     );
@@ -227,7 +227,7 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
             )
           else
             _buildProgressBar(steps, icons, labels, Colors.blueAccent),
-          Text('${order.totalCost.toInt()} MDL', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+          Text('${order.totalCost.toInt()} Руб', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
         ],
       ),
     );
@@ -259,7 +259,7 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
             )
           else
             _buildProgressBar(steps, icons, labels, color),
-          Text('${order.totalPrice.toInt()} MDL', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.black)),
+          Text('${order.totalPrice.toInt()} Руб', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.black)),
         ],
       ),
     );

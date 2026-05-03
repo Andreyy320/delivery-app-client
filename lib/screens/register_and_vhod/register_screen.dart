@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:convert'; // Для utf8.encode
-import 'package:crypto/crypto.dart'; // Для sha256
 import 'user_storage.dart';
 import 'login_screen.dart';
 
@@ -18,13 +16,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  // Функция хеширования для единообразия данных
-  String _hashPassword(String password) {
-    var bytes = utf8.encode(password);
-    var digest = sha256.convert(bytes);
-    return digest.toString();
-  }
-
   // ОБНОВЛЕННАЯ логика валидации: телефон должен быть ровно 8 символов
   bool get _isFormValid =>
       _nameController.text.isNotEmpty &&
@@ -40,16 +31,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     }
 
     String phone = '+373${_phoneController.text.trim()}';
-
-    // ХЕШИРОВАНИЕ пароля перед регистрацией
-    String hashedPassword = _hashPassword(_passwordController.text.trim());
+    String rawPassword = _passwordController.text.trim(); // Просто строка без хеша
 
     try {
       await UserStorage.register(
         name: _nameController.text.trim(),
         phone: phone,
         email: _emailController.text.trim(),
-        password: hashedPassword, // Передаем хеш
+        password: rawPassword, // Передаем чистую строку
       );
 
       if (mounted) {
@@ -66,7 +55,16 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         );
       }
     } catch (e) {
-      _error('Ошибка регистрации: $e');
+      String errorMessage = 'Ошибка регистрации';
+
+      // Проверка на существующий аккаунт
+      if (e.toString().contains('email-already-in-use') || e.toString().contains('already exists')) {
+        errorMessage = 'Аккаунт с таким Email уже существует !';
+      } else {
+        errorMessage = 'Ошибка: $e';
+      }
+
+      _error(errorMessage);
     }
   }
 

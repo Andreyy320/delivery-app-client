@@ -34,6 +34,30 @@ class _OrdersScreenState extends State<OrdersScreen> {
     _initOrdersStream();
   }
 
+  // Функция для перевода статусов на русский язык
+  String _translateStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'new':
+        return 'Новый';
+      case 'preparing':
+        return 'Готовится';
+      case 'accepted':
+        return 'Принят';
+      case 'in_progress':
+      case 'inprogress':
+        return 'В пути';
+      case 'ready':
+        return 'Готов';
+      case 'delivered':
+      case 'completed':
+        return 'Доставлен';
+      case 'cancelled':
+        return 'Отменен';
+      default:
+        return status; // Если статус незнакомый, вернет как есть
+    }
+  }
+
   void _initOrdersStream() {
     ordersStream = FirebaseFirestore.instance
         .collection('users')
@@ -97,8 +121,16 @@ class _OrdersScreenState extends State<OrdersScreen> {
     for (var item in order.items) {
       addToCartItem(widget.userId, order.shopId!, item.dish);
     }
+
+    String originalRestaurantName = order.restaurantName ?? "Ресторан";
+
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => CartScreen(shopId: order.shopId!, restaurantName: "Повтор заказа")),
+      MaterialPageRoute(
+          builder: (_) => CartScreen(
+              shopId: order.shopId!,
+              restaurantName: originalRestaurantName
+          )
+      ),
     );
   }
 
@@ -199,7 +231,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   Widget _buildFoodCard(Order order) {
     return _baseCard(
       color: Colors.deepOrange,
-      title: 'Доставка еды',
+      title: order.restaurantName ?? 'Доставка еды',
       dateTime: order.dateTime,
       path: 'orders',
       id: order.id,
@@ -212,24 +244,49 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: item.dish.imagePath.startsWith('http')
-                      ? Image.network(item.dish.imagePath, width: 45, height: 45, fit: BoxFit.cover)
-                      : Image.asset(item.dish.imagePath, width: 45, height: 45, fit: BoxFit.cover),
+                      ? Image.network(item.dish.imagePath, width: 40, height: 40, fit: BoxFit.cover)
+                      : Image.asset(item.dish.imagePath, width: 40, height: 40, fit: BoxFit.cover),
                 ),
                 const SizedBox(width: 12),
-                Expanded(child: Text(item.dish.name, style: const TextStyle(fontWeight: FontWeight.w600))),
-                Text('${item.quantity} x', style: const TextStyle(color: Colors.grey)),
+                Expanded(
+                    child: Text(
+                      item.dish.name,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    )
+                ),
+                const SizedBox(width: 8),
+                Text('${item.quantity} x', style: const TextStyle(color: Colors.grey, fontSize: 13)),
               ],
             ),
           )),
-          const Divider(height: 24),
+          const Divider(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('${order.total.toInt()} MDL', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-              TextButton(
-                onPressed: () => _repeatOrder(order),
-                style: TextButton.styleFrom(backgroundColor: Colors.deepOrange.withOpacity(0.1), foregroundColor: Colors.deepOrange),
-                child: const Text('Повторить'),
+              Text('${order.total.toInt()} Руб', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+              Row(
+                children: [
+                  // Добавлен статус и для еды
+                  Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  ),
+                  SizedBox(
+                    height: 35,
+                    child: TextButton(
+                      onPressed: () => _repeatOrder(order),
+                      style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          backgroundColor: Colors.deepOrange.withOpacity(0.1),
+                          foregroundColor: Colors.deepOrange,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+                      ),
+                      child: const Text('Повторить', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
               )
             ],
           )
@@ -238,7 +295,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  // --- КАРТОЧКА ЭКСПРЕСС ---
   Widget _buildExpressCard(DeliveryOrder order) {
     return _baseCard(
       color: Colors.deepPurple,
@@ -251,70 +307,92 @@ class _OrdersScreenState extends State<OrdersScreen> {
         children: [
           _routeRow(Icons.circle, Colors.deepPurple, 'Точка А'),
           _routeRow(Icons.location_on, Colors.redAccent, 'Точка Б'),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           _footerRow(order.totalCost.toInt().toString(), order.status, Colors.deepPurple),
         ],
       ),
     );
   }
 
-  // --- КАРТОЧКА ГРУЗОПЕРЕВОЗОК (ГОРОД/МЕЖГОРОД) ---
   Widget _buildCargoCard(String title, dynamic order, Color color, String path) {
     return _baseCard(
       color: color,
-      title: 'Грузоперевозки: $title',
+      title: 'Грузовое: $title',
       dateTime: order.createdAt,
       path: path,
       id: order.id,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('${order.fromAddress} → ${order.toAddress}',
-              style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+          Text(
+              '${order.fromAddress} → ${order.toAddress}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis
+          ),
           const SizedBox(height: 4),
-          Text('Тип: ${order.bodyType} • Гр: ${order.loaders}', style: const TextStyle(color: Colors.black54, fontSize: 13)),
-          const SizedBox(height: 12),
+          Text(
+              'Тип: ${order.bodyType} • Гр: ${order.loaders}',
+              style: const TextStyle(color: Colors.black54, fontSize: 12)
+          ),
+          const SizedBox(height: 10),
           _footerRow(order.totalPrice.toString(), order.status, color),
         ],
       ),
     );
   }
 
-  // --- ОБЩИЕ КОМПОНЕНТЫ ДИЗАЙНА ---
-
   Widget _baseCard({required Color color, required String title, required DateTime dateTime, required String path, required String id, required Widget child}) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle), child: Icon(Icons.local_mall_rounded, color: color, size: 18)),
-                    const SizedBox(width: 10),
-                    Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                  ],
+                Expanded(
+                  child: Row(
+                    children: [
+                      Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+                          child: Icon(Icons.local_mall_rounded, color: color, size: 16)
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          title,
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 Row(
                   children: [
-                    Text(DateFormat('dd.MM HH:mm').format(dateTime.toLocal()), style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                    const SizedBox(width: 4),
-                    IconButton(onPressed: () => _deleteOrder(path, id), icon: const Icon(Icons.close, size: 18, color: Colors.black26), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+                    Text(DateFormat('dd.MM HH:mm').format(dateTime.toLocal()), style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                    const SizedBox(width: 2),
+                    IconButton(
+                        onPressed: () => _deleteOrder(path, id),
+                        icon: const Icon(Icons.close, size: 16, color: Colors.black26),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints()
+                    ),
                   ],
                 ),
               ],
             ),
           ),
-          Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 16), child: child),
+          Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 14), child: child),
         ],
       ),
     );
@@ -323,7 +401,20 @@ class _OrdersScreenState extends State<OrdersScreen> {
   Widget _routeRow(IconData icon, Color color, String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
-      child: Row(children: [Icon(icon, color: color, size: 14), const SizedBox(width: 8), Text(text, style: const TextStyle(color: Colors.black54, fontSize: 13))]),
+      child: Row(
+          children: [
+            Icon(icon, color: color, size: 12),
+            const SizedBox(width: 8),
+            Expanded(
+                child: Text(
+                  text,
+                  style: const TextStyle(color: Colors.black54, fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                )
+            )
+          ]
+      ),
     );
   }
 
@@ -331,11 +422,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text('$price MDL', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+        Text('$price Руб', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-          child: Text(status.toUpperCase(), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 10)),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+          child: Text(
+              _translateStatus(status).toUpperCase(), // ПЕРЕВОД ТУТ
+              style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 9)
+          ),
         ),
       ],
     );

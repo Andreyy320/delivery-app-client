@@ -35,10 +35,9 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
   @override
   void initState() {
     super.initState();
-    _getRoute(); // Загружаем маршрут по дорогам при старте
+    _getRoute();
   }
 
-  // ФУНКЦИЯ ПОЛУЧЕНИЯ МАРШРУТА ПО ДОРОГАМ (OSRM)
   Future<void> _getRoute() async {
     try {
       final url = 'https://router.project-osrm.org/route/v1/driving/'
@@ -59,7 +58,7 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
     } catch (e) {
       debugPrint("Ошибка получения маршрута: $e");
       setState(() {
-        routePoints = [widget.pickup, widget.dropoff]; // Если ошибка, рисуем прямую
+        routePoints = [widget.pickup, widget.dropoff];
         isLoading = false;
       });
     }
@@ -77,9 +76,9 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
       ),
       body: Column(
         children: [
-          // КАРТА
-          Expanded(
-            flex: 3,
+          // КАРТА ОСТАЕТСЯ ФИКСИРОВАННОЙ СВЕРХУ
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.3,
             child: Container(
               margin: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -107,7 +106,6 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
                                 points: routePoints,
                                 color: Colors.deepOrange,
                                 strokeWidth: 5,
-                                // Красивое скругление углов
                                 strokeCap: StrokeCap.round,
                                 strokeJoin: StrokeJoin.round,
                               ),
@@ -140,23 +138,48 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
             ),
           ),
 
-          // ИНФОРМАЦИЯ О ЗАКАЗЕ
+          // ПРОКРУЧИВАЕМАЯ ЧАСТЬ (АДРЕСА + УСЛУГИ)
           Expanded(
-            flex: 4,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('МАРШРУТ', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.black38)),
-                  const SizedBox(height: 12),
-                  _buildAddressCard(),
-                  const SizedBox(height: 24),
-                  const Text('УСЛУГИ', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.black38)),
-                  const SizedBox(height: 12),
-                  Expanded(child: _buildOptionsList()),
-                ],
-              ),
+            child: CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      const Text('МАРШРУТ', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.black38)),
+                      const SizedBox(height: 12),
+                      _buildAddressCard(),
+                      const SizedBox(height: 24),
+                      const Text('УСЛУГИ', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.black38)),
+                      const SizedBox(height: 12),
+                    ]),
+                  ),
+                ),
+                // Список услуг через SliverList, чтобы они были частью общей прокрутки
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  sliver: widget.options.isEmpty
+                      ? const SliverToBoxAdapter(
+                    child: Center(
+                      child: Padding(
+                        padding: EdgeInsets.only(top: 20),
+                        child: Text('Дополнительных услуг нет', style: TextStyle(color: Colors.black38, fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                  )
+                      : SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                        final optId = widget.options.elementAt(index);
+                        return _buildOptionItem(optId);
+                      },
+                      childCount: widget.options.length,
+                    ),
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 20)), // Отступ снизу
+              ],
             ),
           ),
 
@@ -173,6 +196,7 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
       child: Column(
         children: [
           _buildRow(Icons.circle, Colors.green, 'ОТКУДА', widget.pickup, true),
+          const SizedBox(height: 10),
           _buildRow(Icons.location_on_rounded, Colors.deepOrange, 'КУДА', widget.dropoff, false),
         ],
       ),
@@ -195,84 +219,61 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
     );
   }
 
-  Widget _buildOptionsList() {
-    if (widget.options.isEmpty) {
-      return const Center(
-        child: Text(
-          'Дополнительных услуг нет',
-          style: TextStyle(color: Colors.black38, fontWeight: FontWeight.w600),
-        ),
-      );
+  Widget _buildOptionItem(String optId) {
+    final price = optionPrices[optId] ?? 0;
+    String title = '';
+    IconData icon = Icons.check_circle_outline;
+
+    switch (optId) {
+      case 'receiver_pay':
+        title = 'Оплатит получатель';
+        icon = Icons.payment_rounded;
+        break;
+      case 'fragile':
+        title = 'Хрупкий груз';
+        icon = Icons.auto_awesome_rounded;
+        break;
+      case 'large':
+        title = 'Крупные габариты';
+        icon = Icons.straighten_rounded;
+        break;
+      default:
+        title = optId;
     }
 
-    return ListView(
-      physics: const BouncingScrollPhysics(),
-      children: widget.options.map((optId) {
-        final price = optionPrices[optId] ?? 0;
-        String title = '';
-        IconData icon = Icons.check_circle_outline;
-
-        // Мапим английские ID на русский текст и иконки
-        switch (optId) {
-          case 'receiver_pay':
-            title = 'Оплатит получатель';
-            icon = Icons.payment_rounded;
-            break;
-          case 'fragile':
-            title = 'Хрупкий груз';
-            icon = Icons.auto_awesome_rounded;
-            break;
-          case 'large':
-            title = 'Крупные габариты';
-            icon = Icons.straighten_rounded;
-            break;
-          default:
-            title = optId; // На случай, если появится новый ID
-        }
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)
-            ],
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: Colors.deepOrange.withOpacity(0.08), shape: BoxShape.circle),
+            child: Icon(icon, size: 18, color: Colors.deepOrange),
           ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.deepOrange.withOpacity(0.08),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 18, color: Colors.deepOrange),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                ),
-              ),
-              Text(
-                '+$price ₽',
-                style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.deepOrange),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
+          const SizedBox(width: 14),
+          Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15))),
+          Text('+$price ₽', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.deepOrange)),
+        ],
+      ),
     );
   }
 
   Widget _buildBottomAction(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 34),
-      decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
+      ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

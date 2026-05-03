@@ -13,9 +13,9 @@ class Order {
   final DateTime dateTime;
   final String status;
   final String? shopId;
+  final String? restaurantName; // 🔹 НОВОЕ: Название заведения
   final String type;
 
-  // 🔹 НОВОЕ: ID курьера, чтобы клиент знал за кем следить
   final String? courierId;
 
   final DateTime? startedAt;
@@ -24,8 +24,6 @@ class Order {
   final DateTime? inProgressAt;
   final DateTime? deliveredAt;
 
-  // 🔹 НОВОЕ: Геттеры для совместимости с экраном отслеживания
-  // Они просто отдают широту и долготу из твоего существующего deliveryLocation
   double get clientLat => deliveryLocation.latitude;
   double get clientLng => deliveryLocation.longitude;
 
@@ -39,8 +37,9 @@ class Order {
     required this.dateTime,
     required this.status,
     required this.type,
-    this.courierId, // 🔹 Добавляем в конструктор
+    this.courierId,
     this.shopId,
+    this.restaurantName, // 🔹 Добавляем в конструктор
     this.startedAt,
     this.readyAt,
     this.acceptedAt,
@@ -69,8 +68,9 @@ class Order {
     'dateTime': dateTime.toIso8601String(),
     'status': status,
     'type': type,
-    'courierId': courierId, // 🔹 Сохраняем ID курьера
+    'courierId': courierId,
     'shopId': shopId,
+    'restaurantName': restaurantName, // 🔹 Сохраняем название
     'startedAt': startedAt?.toIso8601String(),
     'readyAt': readyAt?.toIso8601String(),
     'acceptedAt': acceptedAt?.toIso8601String(),
@@ -100,8 +100,9 @@ class Order {
       dateTime: DateTime.parse(json['dateTime']),
       status: json['status'] ?? 'preparing',
       type: json['category'] ?? 'restaurant',
-      courierId: json['courierId'], // 🔹 Получаем из JSON
+      courierId: json['courierId'],
       shopId: json['shopId'],
+      restaurantName: json['restaurantName'], // 🔹 Читаем название
       startedAt: json['startedAt'] != null ? DateTime.parse(json['startedAt']) : null,
       readyAt: json['readyAt'] != null ? DateTime.parse(json['readyAt']) : null,
       acceptedAt: json['acceptedAt'] != null ? DateTime.parse(json['acceptedAt']) : null,
@@ -145,8 +146,9 @@ class Order {
       dateTime: date,
       status: data['status'] ?? 'preparing',
       type: data['category'] ?? 'restaurant',
-      courierId: data['courierId'], // 🔹 Получаем из Firestore
+      courierId: data['courierId'],
       shopId: data['shopId'],
+      restaurantName: data['restaurantName'], // 🔹 Читаем название из Firestore
       readyAt: _parseTimestamp('readyAt'),
       startedAt: _parseTimestamp('startedAt'),
       acceptedAt: _parseTimestamp('acceptedAt'),

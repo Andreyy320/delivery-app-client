@@ -124,7 +124,7 @@ class CartScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${item.dish.price.toInt()} MDL',
+                  '${item.dish.price.toInt()} Руб',
                   style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.w900, fontSize: 17),
                 ),
               ],
@@ -175,7 +175,7 @@ class CartScreen extends StatelessWidget {
               const Text('Итого к оплате:',
                   style: TextStyle(fontSize: 16, color: Colors.black54, fontWeight: FontWeight.w600)),
               Text(
-                '${getCartTotal(userId, shopId).toInt()} MDL',
+                '${getCartTotal(userId, shopId).toInt()} Руб',
                 style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Colors.black),
               ),
             ],

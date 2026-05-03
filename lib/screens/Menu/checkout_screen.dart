@@ -378,7 +378,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             fontSize: 16,
                             color: Colors.grey,
                             fontWeight: FontWeight.w600)),
-                    Text('${total.toStringAsFixed(0)} MDL',
+                    Text('${total.toStringAsFixed(0)} Руб',
                         style: const TextStyle(
                             fontSize: 24, fontWeight: FontWeight.w900)),
                   ],

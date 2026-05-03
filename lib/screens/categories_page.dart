@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:untitled1/screens/restouranti/food_restaurants_screen.dart';
 import 'package:untitled1/screens/Produckti/product_menu.dart';
 import '../screens/Apteki/apteka_screen.dart';
@@ -43,6 +45,41 @@ class CategoriesPage extends StatelessWidget {
     );
   }
 
+  // Виджет заголовка, который слушает состояние пользователя
+  Widget _buildUserGreeting() {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(), // Слушаем вход/выход
+      builder: (context, authSnapshot) {
+        if (authSnapshot.connectionState == ConnectionState.waiting) {
+          return const Text('Привет! 👋', style: TextStyle(color: Colors.black54, fontSize: 16));
+        }
+
+        final user = authSnapshot.data;
+
+        if (user == null) {
+          return const Text('Привет, Гость! 👋',
+              style: TextStyle(color: Colors.black54, fontSize: 16, fontWeight: FontWeight.w500));
+        }
+
+        // Если пользователь вошел, слушаем его документ в Firestore
+        return StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+          builder: (context, userSnapshot) {
+            String name = "Пользователь";
+            if (userSnapshot.hasData && userSnapshot.data!.exists) {
+              final data = userSnapshot.data!.data() as Map<String, dynamic>;
+              name = data['name'] ?? "Пользователь";
+            }
+            return Text(
+              'Привет, $name! 👋',
+              style: const TextStyle(color: Colors.black54, fontSize: 16, fontWeight: FontWeight.w500),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -66,15 +103,12 @@ class CategoriesPage extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Column(
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Привет, Андрей! 👋',
-                          style: TextStyle(color: Colors.black54, fontSize: 16, fontWeight: FontWeight.w500),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
+                        _buildUserGreeting(), // Вызываем наш "живой" заголовок
+                        const SizedBox(height: 4),
+                        const Text(
                           'Доставка рядом',
                           style: TextStyle(
                             color: Colors.black,
@@ -85,9 +119,6 @@ class CategoriesPage extends StatelessWidget {
                         ),
                       ],
                     ),
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                    ),
                   ],
                 ),
               ),
@@ -95,7 +126,6 @@ class CategoriesPage extends StatelessWidget {
 
             const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
-            // ЗАГОЛОВОК СЕКЦИИ
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               sliver: SliverToBoxAdapter(
@@ -108,7 +138,6 @@ class CategoriesPage extends StatelessWidget {
 
             const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-            // СЕТКА КАТЕГОРИЙ (Контент по центру)
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               sliver: SliverGrid(
@@ -124,7 +153,6 @@ class CategoriesPage extends StatelessWidget {
                     return GestureDetector(
                       onTap: () => openCategory(context, category.title),
                       child: Container(
-                        // Центрируем всё содержимое внутри контейнера
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: Colors.white,
@@ -138,8 +166,7 @@ class CategoriesPage extends StatelessWidget {
                           ],
                         ),
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center, // Центр по вертикали
-                          crossAxisAlignment: CrossAxisAlignment.center, // Центр по горизонтали
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Container(
                               padding: const EdgeInsets.all(14),
