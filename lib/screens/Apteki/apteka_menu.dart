@@ -51,7 +51,6 @@ class _AptekaMenuScreenState extends State<AptekaMenuScreen> {
       if (context != null) {
         final box = context.findRenderObject() as RenderBox;
         final offset = box.localToGlobal(Offset.zero).dy;
-        // Порог срабатывания активной категории
         if (offset >= 0 && offset < 220) {
           if (_activeCategory != category) {
             setState(() => _activeCategory = category);
@@ -126,14 +125,13 @@ class _AptekaMenuScreenState extends State<AptekaMenuScreen> {
             .collection('categories')
             .doc(widget.shopId)
             .collection('menu')
-            .where('isAvailable', isEqualTo: true) // <--- ДОБАВЬТЕ ЭТУ СТРОКУ
+            .where('isAvailable', isEqualTo: true)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.hasError) return const Center(child: Text('Ошибка загрузки')); // Рекомендую добавить обработку ошибки
+          if (snapshot.hasError) return const Center(child: Text('Ошибка загрузки'));
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.deepOrange));
 
           final allItems = snapshot.data!.docs.map((doc) => Dish.fromFirestore(doc)).toList();
-          // ... остальной код без изменений
           final filteredItems = allItems.where((item) =>
           item.name.toLowerCase().contains(_searchQuery) ||
               item.category.toLowerCase().contains(_searchQuery)).toList();
@@ -149,7 +147,6 @@ class _AptekaMenuScreenState extends State<AptekaMenuScreen> {
 
           return Column(
             children: [
-              // Поиск
               Container(
                 color: Colors.white,
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -170,7 +167,6 @@ class _AptekaMenuScreenState extends State<AptekaMenuScreen> {
                   ),
                 ),
               ),
-              // Горизонтальный выбор категорий
               Container(
                 height: 60,
                 color: Colors.white,
@@ -204,7 +200,6 @@ class _AptekaMenuScreenState extends State<AptekaMenuScreen> {
                   },
                 ),
               ),
-              // Список товаров
               Expanded(
                 child: ListView.builder(
                   controller: _scrollController,
@@ -230,7 +225,7 @@ class _AptekaMenuScreenState extends State<AptekaMenuScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            childAspectRatio: 0.65, // Как в твоем примере дизайна
+                            childAspectRatio: 0.65,
                             crossAxisSpacing: 16,
                             mainAxisSpacing: 16,
                           ),
@@ -263,7 +258,6 @@ class PharmacyItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final userId = FirebaseAuth.instance.currentUser?.uid ?? "";
 
-    // Логика единиц измерения для аптеки
     String getUnit(String category) {
       final cat = category.toLowerCase();
       if (cat.contains('сироп') || cat.contains('капли') || cat.contains('спрей')) {
@@ -272,7 +266,7 @@ class PharmacyItemCard extends StatelessWidget {
       if (cat.contains('мазь') || cat.contains('гель')) {
         return "г";
       }
-      return "шт"; // Для таблеток и капсул
+      return "шт";
     }
 
     return ValueListenableBuilder<List<CartItem>>(
@@ -296,6 +290,7 @@ class PharmacyItemCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // Картинка и ценник
               Expanded(
                 flex: 5,
                 child: Container(
@@ -328,28 +323,37 @@ class PharmacyItemCard extends StatelessWidget {
                   ),
                 ),
               ),
-              Expanded(
-                flex: 4,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Column(
-                    children: [
-                      Text(dish.name, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 2),
-                      Text("${dish.weight} ${getUnit(dish.category)}",
-                          style: TextStyle(color: Colors.blueAccent[200], fontSize: 12, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text(dish.description, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
+
+              // Описание
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(dish.name, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 2),
+                    Text("${dish.weight} ${getUnit(dish.category)}",
+                        style: TextStyle(color: Colors.blueAccent[200], fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
+                    // Ограничиваем высоту описания, чтобы оно не налетало на кнопку
+                    SizedBox(
+                      height: 30,
+                      child: Text(dish.description, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontSize: 11, color: Colors.black38, height: 1.1)),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
+
+              const Spacer(), // Гарантирует, что кнопка будет в самом низу и не слипнется с текстом
+
+              // Кнопка
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                 child: GestureDetector(
-                  onTap: () => addToCartItem(userId, shopId, dish, context: context),                  child: AnimatedContainer(
+                  onTap: () => addToCartItem(userId, shopId, dish, context: context),
+                  child: AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
                     height: 40,
                     decoration: BoxDecoration(
@@ -372,7 +376,6 @@ class PharmacyItemCard extends StatelessWidget {
   }
 }
 
-// Вспомогательный виджет для счетчика в AppBar
 Widget PositionByRelative(String count) {
   return Positioned(
     right: 4, top: 10,

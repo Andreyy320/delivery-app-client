@@ -372,7 +372,7 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
                           if (type == 'food') return buildFoodOrderCard(order as Order);
                           if (type == 'delivery') return buildDeliveryOrderCard(order as DeliveryOrder);
                           if (type == 'city') return buildCargoCard('Городская доставка', order, Colors.green, 'cityOrders');
-                          return buildCargoCard('Межгородская доставка', order, Colors.blueGrey, 'mejCityOrders');
+                          return buildCargoCard('Межгород доставка', order, Colors.blueGrey, 'mejCityOrders');
                         },
                       );
                     },
