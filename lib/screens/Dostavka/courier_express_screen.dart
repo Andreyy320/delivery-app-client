@@ -26,12 +26,12 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
     'large': 'Крупный груз',
   };
   final Map<String, int> optionPrices = {
-    'receiver_pay': 10,
+    'receiver_pay': 0,
     'fragile': 20,
     'large': 30,
   };
 
-  // Выбор координат
+  // --- ЛОГИКА (БЕЗ ИЗМЕНЕНИЙ) ---
   Future<void> _pickLocation(bool isPickup) async {
     final LatLng? result = await Navigator.push(
       context,
@@ -47,7 +47,6 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
     }
   }
 
-  // Расчет стоимости
   double calculateDeliveryCost() {
     double base = 50;
     double optionsCost = 0;
@@ -55,7 +54,6 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
     return base + optionsCost;
   }
 
-  // Подтверждение и сохранение заказа
   Future<void> _confirmAndSaveOrder() async {
     if (_pickupLocation == null || _dropoffLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -73,14 +71,11 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
     }
 
     final totalCost = calculateDeliveryCost();
-
-    // Берем имя и телефон из Firestore
     final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
     final userData = userDoc.data();
     final clientName = userData?['name'] ?? 'Без имени';
     final clientPhone = userData?['phone'] ?? '-';
 
-    // Открываем экран подтверждения
     final confirmed = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -93,18 +88,11 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
       ),
     );
 
-    // Если подтвердили
     if (confirmed == true) {
       try {
         final orderData = {
-          'pickup': {
-            'lat': _pickupLocation!.latitude,
-            'lng': _pickupLocation!.longitude,
-          },
-          'dropoff': {
-            'lat': _dropoffLocation!.latitude,
-            'lng': _dropoffLocation!.longitude,
-          },
+          'pickup': {'lat': _pickupLocation!.latitude, 'lng': _pickupLocation!.longitude},
+          'dropoff': {'lat': _dropoffLocation!.latitude, 'lng': _dropoffLocation!.longitude},
           'options': selectedOptions.toList(),
           'totalCost': totalCost,
           'status': 'new',
@@ -133,7 +121,7 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
     }
   }
 
-  // Виджет для опций (ИСПРАВЛЕННЫЙ)
+  // --- ОБНОВЛЕННЫЙ ДИЗАЙН ОПЦИЙ ---
   Widget _buildOptionTile(String optId) {
     bool isSelected = selectedOptions.contains(optId);
     return GestureDetector(
@@ -145,41 +133,48 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
             selectedOptions.add(optId);
         });
       },
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
         margin: const EdgeInsets.symmetric(vertical: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          // Сделаем границу чуть тоньше, чтобы визуально было легче
+          borderRadius: BorderRadius.circular(20),
+          color: isSelected ? Colors.deepOrange.withOpacity(0.08) : Colors.white,
           border: Border.all(
-            color: isSelected ? Colors.deepOrange : Colors.grey[300]!,
-            width: isSelected ? 2 : 1,
+            color: isSelected ? Colors.deepOrange : Colors.transparent,
+            width: 2,
           ),
-          color: isSelected ? Colors.deepOrange.withOpacity(0.05) : Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Row(
           children: [
-            // 🎯 ТЕПЕРЬ ТЕКСТ ВСЕГДА В ОДНУ СТРОКУ
+            Icon(
+              isSelected ? Icons.check_circle_rounded : Icons.add_circle_outline_rounded,
+              color: isSelected ? Colors.deepOrange : Colors.grey[400],
+            ),
+            const SizedBox(width: 12),
             Expanded(
-              child: FittedBox(
-                fit: BoxFit.scaleDown, // Сжимает текст, если он не влезает
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '${optionTitles[optId]} ${optionPrices[optId]! > 0 ? "(+${optionPrices[optId]} ₽)" : ""}',
-                  style: TextStyle(
-                    fontSize: 16,
-                    // Если выбрано — делаем текст жирнее
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    color: isSelected ? Colors.black : Colors.black87,
-                  ),
+              child: Text(
+                optionTitles[optId]!,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                  color: isSelected ? Colors.black : Colors.black87,
                 ),
               ),
             ),
-            const SizedBox(width: 8), // Зазор перед иконкой
-            Icon(
-              isSelected ? Icons.check_circle : Icons.circle_outlined,
-              color: isSelected ? Colors.deepOrange : Colors.grey,
-              size: 24,
+            Text(
+              '+${optionPrices[optId]} ₽',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                color: isSelected ? Colors.deepOrange : Colors.black54,
+              ),
             ),
           ],
         ),
@@ -190,152 +185,154 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FB),
       appBar: AppBar(
-        title: const Text('Срочная доставка'),
-        backgroundColor: Colors.deepOrange,
+        title: const Text(
+          'Срочная доставка',
+          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: -0.8),
+        ),
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView(
-                children: [
-                  // --- ПОЛЕ: ОТКУДА ---
-                  const Text('Откуда забрать', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: () => _pickLocation(true),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.grey[50],
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.circle, color: Colors.green, size: 12), // Точка отправления
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _pickupLocation != null
-                                  ? 'Координаты: ${_pickupLocation!.latitude.toStringAsFixed(5)}, ${_pickupLocation!.longitude.toStringAsFixed(5)}'
-                                  : 'Выберите место отправления',
-                              style: TextStyle(
-                                  color: _pickupLocation != null ? Colors.black : Colors.grey[600],
-                                  fontSize: 15
-                              ),
-                            ),
-                          ),
-                          const Icon(Icons.map_outlined, color: Colors.grey, size: 20),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // --- ПОЛЕ: КУДА ---
-                  const Text('Куда доставить', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: () => _pickLocation(false),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.grey[50],
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.location_on, color: Colors.deepOrange, size: 18), // Точка доставки
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              _dropoffLocation != null
-                                  ? 'Координаты: ${_dropoffLocation!.latitude.toStringAsFixed(5)}, ${_dropoffLocation!.longitude.toStringAsFixed(5)}'
-                                  : 'Выберите место доставки',
-                              style: TextStyle(
-                                  color: _dropoffLocation != null ? Colors.black : Colors.grey[600],
-                                  fontSize: 15
-                              ),
-                            ),
-                          ),
-                          const Icon(Icons.map_outlined, color: Colors.grey, size: 20),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-                  const Text('Дополнительные опции', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  ...allOptions.map(_buildOptionTile).toList(),
-                ],
-              ),
-            ),
-
-            // --- НИЖНЯЯ ПАНЕЛЬ С ОПЛАТОЙ ---
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: Colors.grey[200]!)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('К оплате:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
-                  Text(
-                      '${calculateDeliveryCost()} ₽',
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black)
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            // --- ТА САМАЯ КРАСИВАЯ КНОПКА ---
-            Container(
-              width: double.infinity,
-              height: 60,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.deepOrange.withOpacity(0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: ElevatedButton(
-                onPressed: _confirmAndSaveOrder,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepOrange,
-                  foregroundColor: Colors.white, // Текст теперь точно белый
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                _buildAddressCard(
+                  title: 'ОТКУДА ЗАБРАТЬ',
+                  hint: 'Выберите место отправления',
+                  location: _pickupLocation,
+                  icon: Icons.circle,
+                  iconColor: Colors.green,
+                  onTap: () => _pickLocation(true),
                 ),
-                child: const Text(
-                  'ПОДТВЕРДИТЬ ЗАКАЗ',
+                const SizedBox(height: 20),
+                _buildAddressCard(
+                  title: 'КУДА ДОСТАВИТЬ',
+                  hint: 'Выберите место доставки',
+                  location: _dropoffLocation,
+                  icon: Icons.location_on_rounded,
+                  iconColor: Colors.deepOrange,
+                  onTap: () => _pickLocation(false),
+                ),
+                const SizedBox(height: 32),
+                const Text(
+                  'ДОПОЛНИТЕЛЬНО',
                   style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.black38,
                     letterSpacing: 1.2,
                   ),
                 ),
-              ),
+                const SizedBox(height: 12),
+                ...allOptions.map(_buildOptionTile).toList(),
+              ],
             ),
-            const SizedBox(height: 10),
-          ],
-        ),
+          ),
+
+          // --- НИЖНЯЯ ПАНЕЛЬ С ОПЛАТОЙ ---
+          Container(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 34),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+              boxShadow: [
+                BoxShadow(color: Colors.black12, blurRadius: 20, offset: Offset(0, -5)),
+              ],
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Итого к оплате',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black54)),
+                    Text(
+                      '${calculateDeliveryCost().toInt()} ₽',
+                      style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Colors.black),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 60,
+                  child: ElevatedButton(
+                    onPressed: _confirmAndSaveOrder,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepOrange,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    ),
+                    child: const Text(
+                      'ПОДТВЕРДИТЬ ЗАКАЗ',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  // Вспомогательный виджет для карточек адреса
+  Widget _buildAddressCard({
+    required String title,
+    required String hint,
+    required LatLng? location,
+    required IconData icon,
+    required Color iconColor,
+    required VoidCallback onTap,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.black38, letterSpacing: 1.1)),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 6)),
+              ],
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: iconColor, size: 20),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    location != null
+                        ? 'Координаты: ${location.latitude.toStringAsFixed(5)}, ${location.longitude.toStringAsFixed(5)}'
+                        : hint,
+                    style: TextStyle(
+                      color: location != null ? Colors.black : Colors.black38,
+                      fontWeight: location != null ? FontWeight.w700 : FontWeight.w500,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded, color: Colors.black26),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

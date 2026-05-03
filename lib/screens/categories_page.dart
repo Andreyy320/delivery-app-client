@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:untitled1/models/dish_model.dart';
 import 'package:untitled1/screens/restouranti/food_restaurants_screen.dart';
+import 'package:untitled1/screens/Produckti/product_menu.dart';
 import '../screens/Apteki/apteka_screen.dart';
 import '../screens/Floarele/floare_menu.dart';
-import 'package:untitled1/screens/Produckti/product_menu.dart';
 import '../screens/electroniki/electronika_menu.dart';
 import 'Dostavka/delivery_services_screen.dart';
-
 
 class Category {
   final String title;
@@ -17,125 +15,162 @@ class Category {
 }
 
 final categories = [
-  Category(title: 'Еда', icon: Icons.fastfood, color: Colors.orange),
-  Category(title: 'Продукты', icon: Icons.shopping_basket, color: Colors.green),
-  Category(title: 'Аптека', icon: Icons.medical_services, color: Colors.red),
-  Category(title: 'Цветы', icon: Icons.local_florist, color: Colors.pink),
-  Category(title: 'Электроника', icon: Icons.devices, color: Colors.blue),
-  Category(title: 'Доставка', icon: Icons.local_shipping, color: Colors.deepPurple),
+  Category(title: 'Еда', icon: Icons.fastfood_rounded, color: Colors.orange),
+  Category(title: 'Продукты', icon: Icons.shopping_bag_rounded, color: Colors.green),
+  Category(title: 'Аптека', icon: Icons.local_pharmacy_rounded, color: Colors.red),
+  Category(title: 'Цветы', icon: Icons.local_florist_rounded, color: Colors.pink),
+  Category(title: 'Электроника', icon: Icons.phone_iphone_rounded, color: Colors.blue),
+  Category(title: 'Доставка', icon: Icons.local_shipping_rounded, color: Colors.deepPurple),
 ];
 
 class CategoriesPage extends StatelessWidget {
-  final void Function(Dish, String) addToCart;
-  const CategoriesPage({super.key, required this.addToCart});
+  const CategoriesPage({super.key});
 
   void openCategory(BuildContext context, String title) {
     Widget screen;
     switch (title) {
-      case 'Еда':
-        screen = FoodRestaurantsScreen(addToCart: addToCart);
-        break;
-      case 'Аптека':
-        screen = AptekaScreen(addToCart: addToCart);
-        break;
-      case 'Электроника':
-        screen = ElectronikaScreen(addToCart: addToCart);
-        break;
-      case 'Цветы':
-        screen = FloareScreen(addToCart: addToCart);
-        break;
-      case 'Продукты':
-        screen = ProductScreen(addToCart: addToCart);
-        break;
-      case 'Доставка':
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => DeliveryServicesScreen(),
-          ),
-        );
-        return;
-      default:
-        return;
+      case 'Еда': screen = const FoodRestaurantsScreen(); break;
+      case 'Продукты': screen = const ProductScreen(); break;
+      case 'Аптека': screen = const AptekaScreen(); break;
+      case 'Электроника': screen = const ElectronikaScreen(); break;
+      case 'Цветы': screen = const FloareScreen(); break;
+      case 'Доставка': screen = const DeliveryServicesScreen(); break;
+      default: return;
     }
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => screen),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Верхняя панель с градиентом
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(colors: [Colors.orange, Colors.deepOrange]),
-              borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(32), bottomRight: Radius.circular(32)),
-            ),
-            child: const Text(
-              'Доставка рядом',
-              style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Text('Что вас интересует?',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          ),
-          const SizedBox(height: 16),
-          // Сетка категорий
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: GridView.builder(
-                itemCount: categories.length,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 1.4, // Немного увеличили высоту карточки
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FB),
+      body: SafeArea(
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            // ХЕДЕР
+            SliverToBoxAdapter(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(24, 40, 24, 30),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(40),
+                    bottomRight: Radius.circular(40),
+                  ),
                 ),
-                itemBuilder: (context, index) {
-                  final category = categories[index];
-                  return InkWell(
-                    borderRadius: BorderRadius.circular(20),
-                    onTap: () => openCategory(context, category.title),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: category.color.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center, // Центрируем всё по вертикали
-                        children: [
-                          Icon(category.icon, size: 36, color: category.color),
-                          const SizedBox(height: 12),
-                          // Этот блок не дает тексту вылезать за границы
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              category.title,
-                              style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black87
-                              ),
-                            ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Привет, Андрей! 👋',
+                          style: TextStyle(color: Colors.black54, fontSize: 16, fontWeight: FontWeight.w500),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Доставка рядом',
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 30,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -1,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  );
-                },
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+
+            // ЗАГОЛОВОК СЕКЦИИ
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              sliver: SliverToBoxAdapter(
+                child: const Text(
+                  'Категории',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+                ),
+              ),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+            // СЕТКА КАТЕГОРИЙ (Контент по центру)
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: 1.1,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                    final category = categories[index];
+                    return GestureDetector(
+                      onTap: () => openCategory(context, category.title),
+                      child: Container(
+                        // Центрируем всё содержимое внутри контейнера
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(28),
+                          boxShadow: [
+                            BoxShadow(
+                              color: category.color.withOpacity(0.1),
+                              blurRadius: 15,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center, // Центр по вертикали
+                          crossAxisAlignment: CrossAxisAlignment.center, // Центр по горизонтали
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: category.color.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Icon(category.icon, size: 36, color: category.color),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              category.title,
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.black,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                  childCount: categories.length,
+                ),
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 30)),
+          ],
+        ),
       ),
     );
   }

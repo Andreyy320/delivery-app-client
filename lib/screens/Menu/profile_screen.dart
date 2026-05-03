@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/auth_state.dart';
 import '../register_and_vhod/about_app_screen.dart';
 import '../register_and_vhod/notification_settings_screen.dart';
+import '../register_and_vhod/partnerstvo_screen.dart';
 import '../register_and_vhod/user_storage.dart';
 import '../register_and_vhod/login_screen.dart';
 import '../register_and_vhod/register_screen.dart';
@@ -23,18 +24,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _loadUser(); // загружаем пользователя при старте
+    _loadUser();
   }
 
   Future<void> _loadUser() async {
-    setState(() {
-      isLoading = true;
-    });
-
+    setState(() => isLoading = true);
     final user = await UserStorage.getCurrentUser();
-    debugPrint('🔹 Loaded User: $user');
-
-    if (mounted) { // важно проверить, что виджет ещё жив
+    if (mounted) {
       setState(() {
         currentUser = user;
         isLoading = false;
@@ -47,107 +43,86 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return ValueListenableBuilder<bool>(
       valueListenable: authState,
       builder: (context, isLoggedIn, _) {
-        if (!isLoggedIn) {
-          return _buildAuthButtons();
-        }
-
-        // Если данные ещё не загружены — показываем индикатор
+        if (!isLoggedIn) return _buildAuthButtons();
         if (isLoading || currentUser == null) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const Scaffold(body: Center(child: CircularProgressIndicator(color: Colors.deepOrange)));
         }
-
         return _buildProfile();
       },
     );
   }
 
+  // --- ЭКРАН ВХОДА (КОГДА НЕ АВТОРИЗОВАН) ---
   Widget _buildAuthButtons() {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              // 🎯 ДОБАВЛЕНО: Центрирует все элементы внутри колонки по горизонтали
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Логотип или иконка приложения
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.deepOrange.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.local_shipping, size: 80, color: Colors.deepOrange),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 30),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  color: Colors.deepOrange.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(40),
                 ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Добро пожаловать!',
-                  textAlign: TextAlign.center, // Явно центрируем текст внутри виджета
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Войдите, чтобы управлять заказами',
-                  style: TextStyle(color: Colors.grey, fontSize: 16),
-                  textAlign: TextAlign.center, // Текст подзаголовка тоже по центру
-                ),
-                const SizedBox(height: 48),
-
-                // Кнопка ВОЙТИ
-                _buildBigButton(
-                  label: 'ВОЙТИ',
+                child: const Icon(Icons.person_outline_rounded, size: 80, color: Colors.deepOrange),
+              ),
+              const SizedBox(height: 32),
+              const Text(
+                'Личный кабинет',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -1),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Войдите, чтобы отслеживать заказы и получать персональные скидки',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.black54, fontSize: 16, height: 1.4),
+              ),
+              const SizedBox(height: 50),
+              _buildBigButton(
+                label: 'ВОЙТИ',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                ).then((_) => _loadUser()),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 60,
+                child: TextButton(
                   onPressed: () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    MaterialPageRoute(builder: (_) => const RegistrationScreen()),
                   ).then((_) => _loadUser()),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Кнопка РЕГИСТРАЦИЯ
-                SizedBox(
-                  width: double.infinity,
-                  height: 60,
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const RegistrationScreen()),
-                    ).then((_) => _loadUser()),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.deepOrange, width: 2),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                    child: const Text(
-                      'СОЗДАТЬ АККАУНТ',
-                      style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, letterSpacing: 1.1),
-                    ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.deepOrange,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                   ),
+                  child: const Text('СОЗДАТЬ АККАУНТ', style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.5)),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-// Вынес нашу фирменную кнопку в отдельный метод, чтобы не дублировать код
   Widget _buildBigButton({required String label, required VoidCallback onPressed}) {
     return Container(
       width: double.infinity,
       height: 60,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.deepOrange.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
+            color: Colors.deepOrange.withOpacity(0.25),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
@@ -157,32 +132,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
           backgroundColor: Colors.deepOrange,
           foregroundColor: Colors.white,
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         ),
-        child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1)),
       ),
     );
   }
+
+  // --- ОСНОВНОЙ ЭКРАН ПРОФИЛЯ ---
   Widget _buildProfile() {
     final name = currentUser?['name'] ?? 'Гость';
     final phone = currentUser?['phone'] ?? 'Не указан';
     final email = currentUser?['email'] ?? 'Не указан';
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color(0xFFF8F9FB),
       body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
         child: Column(
           children: [
-            // ВЕРХНЯЯ КАРТОЧКА (ШАПКА)
+            // ВЕРХНЯЯ ЧАСТЬ
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(24, 60, 24, 40),
               decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.deepOrange, Colors.orangeAccent],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+                color: Colors.white,
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(40),
                   bottomRight: Radius.circular(40),
@@ -190,85 +164,70 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               child: Column(
                 children: [
-                  const CircleAvatar(
-                    radius: 40,
-                    backgroundColor: Colors.white,
-                    child: Icon(Icons.person, size: 50, color: Colors.deepOrange),
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.deepOrange.withOpacity(0.2), width: 2),
+                    ),
+                    child: const CircleAvatar(
+                      radius: 45,
+                      backgroundColor: Color(0xFFF8F9FB),
+                      child: Icon(Icons.person_rounded, size: 55, color: Colors.deepOrange),
+                    ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 18),
                   Text(
                     name,
-                    style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: Colors.black, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.5),
                   ),
-                  const SizedBox(height: 12),
-
-                  // --- ИСПРАВЛЕННЫЙ БЛОК КОНТАКТОВ ---
-                  Column(
-                    children: [
-                      // Строка с телефоном
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.phone, color: Colors.white70, size: 14),
-                          const SizedBox(width: 6),
-                          Text(phone, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-                        ],
-                      ),
-                      const SizedBox(height: 8), // Отступ между телефоном и почтой
-                      // Строка с почтой
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.email, color: Colors.white70, size: 14),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              email,
-                              style: const TextStyle(color: Colors.white70, fontSize: 14),
-                              overflow: TextOverflow.ellipsis, // Защита от очень длинных почт
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(phone, style: const TextStyle(color: Colors.black54, fontSize: 14, fontWeight: FontWeight.w600)),
                   ),
-                  // ----------------------------------
                 ],
               ),
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 30),
 
-            // МЕНЮ НАСТРОЕК
+            // МЕНЮ
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('  Личные данные', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
+                  _buildSectionTitle('ЗАКАЗЫ'),
                   _buildMenuCard([
-                    _menuItem(Icons.receipt_long, 'История заказов', () {
+                    _menuItem(Icons.history_rounded, 'История заказов', () {
                       if (currentUser != null && currentUser!['uid'] != null) {
                         Navigator.push(context, MaterialPageRoute(builder: (_) => OrdersScreen(userId: currentUser!['uid'])));
                       }
                     }),
-                    _menuItem(Icons.local_shipping, 'Мои заказы', () {
+                    _menuItem(Icons.local_shipping_rounded, 'Текущий статус', () {
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const OrdersStatusScreen()));
                     }),
                   ]),
 
-                  const SizedBox(height: 24),
-                  const Text('  Безопасность и связь', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 25),
+                  _buildSectionTitle('НАСТРОЙКИ'),
                   _buildMenuCard([
-                    _menuItem(Icons.lock_outline, 'Изменить пароль', () {
+                    _menuItem(Icons.lock_person_rounded, 'Изменить пароль', () {
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangePasswordScreen()));
                     }),
-                    _menuItem(Icons.notifications_none, 'Настройки уведомлений', () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationSettingsScreen()));
+
+
+                    // --- НОВАЯ КНОПКА ТУТ ---
+                    _menuItem(Icons.storefront_rounded, 'Стать партнером', () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const BusinessRegistrationScreen()));
                     }),
-                    _menuItem(Icons.info_outline, 'О приложении', () {
+                    // -----------------------
+                    _menuItem(Icons.help_outline_rounded, 'О приложении', () {
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutAppScreen()));
                     }),
                   ]),
@@ -278,33 +237,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             const SizedBox(height: 40),
 
-            // КНОПКА ВЫХОДА
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: TextButton.icon(
-                onPressed: () async {
-                  await UserStorage.logout();
-                  authState.logout();
-                  setState(() => currentUser = null);
-                },
-                icon: const Icon(Icons.logout, color: Colors.red),
-                label: const Text('Выйти из аккаунта', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16)),
-              ),
+            // ВЫХОД
+            TextButton.icon(
+              onPressed: () async {
+                await UserStorage.logout();
+                authState.logout();
+                setState(() => currentUser = null);
+              },
+              icon: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 20),
+              label: const Text('Выйти из аккаунта',
+                  style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w800, fontSize: 16)),
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: 50),
           ],
         ),
       ),
     );
   }
 
-// Вспомогательные виджеты для профиля
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, bottom: 10),
+      child: Text(
+        title,
+        style: TextStyle(color: Colors.grey[400], fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.2),
+      ),
+    );
+  }
+
   Widget _buildMenuCard(List<Widget> items) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          )
+        ],
       ),
       child: Column(children: items),
     );
@@ -312,11 +284,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _menuItem(IconData icon, String title, VoidCallback onTap) {
     return ListTile(
-      leading: Icon(icon, color: Colors.deepOrange),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
-      trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.deepOrange.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: Colors.deepOrange, size: 22),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.black87)),
+      trailing: Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey[300]),
       onTap: onTap,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     );
   }
 }

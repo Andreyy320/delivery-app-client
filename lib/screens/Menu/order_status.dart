@@ -4,7 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
 import '../../models/order_model.dart';
 import '../Dostavka/DeliveryOrder.dart';
 import '../Dostavka/gorod_model.dart';
-import '../Dostavka/mejgorod_model.dart'; // Модель городских заказов
+import '../Dostavka/mejgorod_model.dart';
+import 'package:intl/intl.dart';
 
 class OrdersStatusScreen extends StatefulWidget {
   const OrdersStatusScreen({super.key});
@@ -21,574 +22,357 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
   Stream<List<CityDeliveryOrder>>? cityDeliveryStream;
   Stream<List<MejCityDeliveryOrder>>? mejCityDeliveryStream;
 
-  final Map<String, String> statusText = {
-    'preparing': 'Ваш заказ готовится',
-    'ready': 'Заказ готов',
-    'inProgress': 'Курьер едет к вам',
-    'delivered': 'Заказ доставлен',
-    'new': 'Заказ создан',
-  };
-
   @override
   void initState() {
     super.initState();
     user = FirebaseAuth.instance.currentUser;
 
     if (user != null) {
-      // Поток заказов еды
       ordersStream = FirebaseFirestore.instance
           .collection('users')
           .doc(user!.uid)
           .collection('orders')
           .orderBy('createdAt', descending: true)
           .snapshots()
-          .map((snapshot) =>
-          snapshot.docs
-              .map((doc) => Order.fromFirestore(doc.id, doc.data()))
-              .toList());
+          .map((snapshot) => snapshot.docs.map((doc) => Order.fromFirestore(doc.id, doc.data())).toList());
 
-      // Поток срочной доставки
       deliveryStream = FirebaseFirestore.instance
           .collection('users')
           .doc(user!.uid)
           .collection('delivery_orders')
           .orderBy('createdAt', descending: true)
           .snapshots()
-          .map((snapshot) =>
-          snapshot.docs
-              .map((doc) => DeliveryOrder.fromFirestore(doc.id, doc.data()))
-              .toList());
+          .map((snapshot) => snapshot.docs.map((doc) => DeliveryOrder.fromFirestore(doc.id, doc.data())).toList());
 
-      // Поток городских заказов
       cityDeliveryStream = FirebaseFirestore.instance
           .collection('users')
           .doc(user!.uid)
           .collection('cityOrders')
           .orderBy('createdAt', descending: true)
           .snapshots()
-          .map((snapshot) =>
-          snapshot.docs
-              .map((doc) => CityDeliveryOrder.fromFirestore(doc.id, doc.data()))
-              .toList());
+          .map((snapshot) => snapshot.docs.map((doc) => CityDeliveryOrder.fromFirestore(doc.id, doc.data())).toList());
 
-
-      // Поток Межгородских заказов
       mejCityDeliveryStream = FirebaseFirestore.instance
           .collection('users')
           .doc(user!.uid)
           .collection('mejCityOrders')
           .orderBy('createdAt', descending: true)
           .snapshots()
-          .map((snapshot) =>
-          snapshot.docs
-              .map((doc) =>
-              MejCityDeliveryOrder.fromFirestore(doc.id, doc.data()))
-              .toList());
+          .map((snapshot) => snapshot.docs.map((doc) => MejCityDeliveryOrder.fromFirestore(doc.id, doc.data())).toList());
     }
   }
 
-  Widget _statusCircle(bool active, IconData icon, String label) {
-    return Column(
-      children: [
-        CircleAvatar(
-          radius: 12,
-          backgroundColor: active ? Colors.deepOrange : Colors.grey[300],
-          child: Icon(
-              icon, color: active ? Colors.white : Colors.grey[600], size: 16),
-        ),
-        const SizedBox(height: 4),
-        Text(label, style: const TextStyle(fontSize: 10)),
-      ],
-    );
+  // --- ФУНКЦИЯ ПЕРЕВОДА СТАТУСОВ ---
+  String _translateStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'new':
+        return 'Новый';
+      case 'accepted':
+        return 'Принят';
+      case 'preparing':
+        return 'Готовится';
+      case 'ready':
+        return 'Готов';
+      case 'in_progress':
+      case 'inprogress':
+      case 'delivering':
+        return 'В пути';
+      case 'delivered':
+      case 'completed':
+        return 'Доставлен';
+      case 'cancelled':
+        return 'Отменен';
+      default:
+        return status;
+    }
   }
 
-  Widget _line(bool active) {
-    return Expanded(
-      child: Container(
-        height: 2,
-        color: active ? Colors.deepOrange : Colors.grey[300],
+  Widget _buildProgressBar(List<bool> steps, List<IconData> icons, List<String> labels, Color activeColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(
+        children: List.generate(steps.length * 2 - 1, (index) {
+          if (index.isEven) {
+            final stepIdx = index ~/ 2;
+            final isActive = steps[stepIdx];
+            return Column(
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 500),
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: isActive ? activeColor : Colors.grey[200],
+                    shape: BoxShape.circle,
+                    boxShadow: isActive ? [BoxShadow(color: activeColor.withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 3))] : [],
+                  ),
+                  child: Icon(icons[stepIdx], color: isActive ? Colors.white : Colors.grey[400], size: 14),
+                ),
+                const SizedBox(height: 6),
+                Text(labels[stepIdx], style: TextStyle(fontSize: 9, fontWeight: isActive ? FontWeight.bold : FontWeight.normal, color: isActive ? Colors.black87 : Colors.grey)),
+              ],
+            );
+          } else {
+            final lineIdx = index ~/ 2;
+            final isLineActive = steps[lineIdx + 1];
+            return Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 18),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 500),
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: isLineActive ? activeColor : Colors.grey[200],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            );
+          }
+        }),
       ),
     );
   }
 
-  /// Карточка еды
+  // --- КАРТОЧКА ЕДЫ / МАГАЗИНОВ ---
   Widget buildFoodOrderCard(Order order) {
+    bool isCancelled = order.status == 'cancelled';
 
-    final preparingActive = order.startedAt != null;       // ресторан начал готовить
-    final readyActive = order.readyAt != null;            // заказ готов
-    final inProgressActive = order.acceptedAt != null || order.inProgressAt != null; // курьер принял или в пути
-    final deliveredActive = order.deliveredAt != null;    // доставлено
+    String title = 'Заказ из ресторана';
+    String prepLabel = 'Готовим';
+    IconData prepIcon = Icons.restaurant;
+    Color themeColor = Colors.deepOrange;
 
-    String currentStatus() {
-      if (deliveredActive) return 'Заказ доставлен';
-      if (inProgressActive) return 'Курьер едет к вам';
-      if (readyActive) return 'Заказ готов';
-      if (preparingActive) return 'Заказ готовится';
-      return 'Заказ создан';
+    if (order.type == 'apteka') {
+      title = 'Заказ из аптеки';
+      prepLabel = 'Собираем';
+      prepIcon = Icons.medical_services;
+      themeColor = Colors.teal;
+    } else if (order.type == 'electronika') {
+      title = 'Заказ электроники';
+      prepLabel = 'Собираем';
+      prepIcon = Icons.devices;
+      themeColor = Colors.indigo;
+    } else if (order.type == 'product') {
+      title = 'Заказ продуктов';
+      prepLabel = 'Собираем';
+      prepIcon = Icons.shopping_basket;
+      themeColor = Colors.green;
+    } else if (order.type == 'svetok') {
+      title = 'Заказ цветов';
+      prepLabel = 'Собираем';
+      prepIcon = Icons.local_florist;
+      themeColor = Colors.pinkAccent;
     }
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      elevation: 4,
-      shadowColor: Colors.deepOrange.withOpacity(0.4),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Заказ от ${order.dateTime.toLocal().toString().split('.')[0]}',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const SizedBox(height: 8),
-            ...order.items.map(
-                  (item) => Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.asset(
-                      item.dish.imagePath,
-                      width: 50,
-                      height: 50,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(item.dish.name,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 14)),
-                        Text('${item.dish.price} ₽ × ${item.quantity}',
-                            style: const TextStyle(
-                                fontSize: 12, color: Colors.grey)),
-                      ],
-                    ),
-                  ),
-                  Text('${item.dish.price * item.quantity} ₽',
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text('Итого: ${order.total.toStringAsFixed(0)} ₽',
-                style:
-                const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 12),
-            Row(
+    final steps = [
+      true,
+      order.startedAt != null,
+      order.readyAt != null,
+      order.acceptedAt != null || order.inProgressAt != null,
+      order.deliveredAt != null
+    ];
+
+    final icons = [Icons.receipt_long, prepIcon, Icons.takeout_dining, Icons.delivery_dining, Icons.check_circle];
+    final labels = ['Создан', prepLabel, 'Готов', 'В пути', 'У вас'];
+
+    return _baseCard(
+      title: title,
+      date: order.dateTime,
+      status: isCancelled ? 'Отменен' : (order.deliveredAt != null ? 'Доставлен' : 'Активен'),
+      color: isCancelled ? Colors.red : themeColor,
+      onDelete: isCancelled || order.deliveredAt != null ? () => _deleteOrder('orders', order.id) : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ...order.items.map((item) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text('• ${item.dish.name} x${item.quantity}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
+          )),
+          const Divider(height: 24),
+          if (isCancelled)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(child: Text("ЗАКАЗ ОТМЕНЕН", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, letterSpacing: 1.2))),
+            )
+          else
+            _buildProgressBar(steps, icons, labels, themeColor),
+          Text('${order.total.toInt()} MDL', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+        ],
+      ),
+    );
+  }
+
+  // --- КАРТОЧКА ДОСТАВКИ ---
+  Widget buildDeliveryOrderCard(DeliveryOrder order) {
+    bool isCancelled = order.status == 'cancelled';
+    final steps = [true, order.acceptedAt != null, order.inProgressAt != null, order.deliveredAt != null];
+    final icons = [Icons.fiber_new, Icons.person_pin_circle, Icons.directions_bike, Icons.done_all];
+    final labels = ['Новый', 'Принят', 'Везем', 'Готово'];
+
+    return _baseCard(
+      title: 'Срочная доставка',
+      date: order.createdAt,
+      status: isCancelled ? 'Отменен' : _translateStatus(order.status),
+      color: isCancelled ? Colors.red : Colors.blueAccent,
+      onDelete: (order.deliveredAt != null || isCancelled) ? () => _deleteOrder('delivery_orders', order.id) : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _locationRow(Icons.radio_button_checked, 'Откуда', Colors.blue),
+          _locationRow(Icons.location_on, 'Куда', Colors.redAccent),
+          if (isCancelled)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(child: Text("ЗАКАЗ ОТМЕНЕН", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, letterSpacing: 1.2))),
+            )
+          else
+            _buildProgressBar(steps, icons, labels, Colors.blueAccent),
+          Text('${order.totalCost.toInt()} MDL', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+        ],
+      ),
+    );
+  }
+
+  // --- КАРТОЧКА ГРУЗОПЕРЕВОЗОК ---
+  Widget buildCargoCard(String type, dynamic order, Color color, String collection) {
+    bool isCancelled = order.status == 'cancelled';
+    final steps = [true, order.acceptedAt != null, order.inProgressAt != null, order.deliveredAt != null];
+    final icons = [Icons.playlist_add_check, Icons.assignment_ind, Icons.local_shipping, Icons.home_work];
+    final labels = ['Заявка', 'Водитель', 'В пути', 'Прибыл'];
+
+    return _baseCard(
+      title: type,
+      date: order.createdAt,
+      status: isCancelled ? 'Отменен' : _translateStatus(order.status),
+      color: isCancelled ? Colors.red : color,
+      onDelete: (order.deliveredAt != null || isCancelled) ? () => _deleteOrder(collection, order.id) : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${order.fromAddress} → ${order.toAddress}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 4),
+          Text('Кузов: ${order.bodyType} • Грузчики: ${order.loaders}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          if (isCancelled)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(child: Text("ЗАКАЗ ОТМЕНЕН", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, letterSpacing: 1.2))),
+            )
+          else
+            _buildProgressBar(steps, icons, labels, color),
+          Text('${order.totalPrice.toInt()} MDL', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.black)),
+        ],
+      ),
+    );
+  }
+
+  Widget _baseCard({required String title, required DateTime date, required String status, required Color color, required Widget child, VoidCallback? onDelete}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 20, offset: const Offset(0, 8))],
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _statusCircle(preparingActive, Icons.settings, 'Готовится'),
-                _line(readyActive || inProgressActive || deliveredActive),
-                _statusCircle(readyActive, Icons.check_circle_outline, 'Готов'),
-                _line(inProgressActive || deliveredActive),
-                _statusCircle(inProgressActive, Icons.directions_bike, 'В пути'),
-                _line(deliveredActive),
-                _statusCircle(deliveredActive, Icons.check_circle, 'Доставлено'),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 16)),
+                    Text(DateFormat('dd MMM, HH:mm').format(date.toLocal()), style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                  ],
+                ),
+                if (onDelete != null)
+                  IconButton(onPressed: onDelete, icon: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent, size: 22))
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                    child: Text(status, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ),
               ],
             ),
-            const SizedBox(height: 4),
-            Text(currentStatus(),
-                style: TextStyle(color: Colors.grey[700], fontSize: 12)),
-          ],
-        ),
+          ),
+          Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 16), child: child),
+        ],
       ),
+    );
+  }
+
+  Widget _locationRow(IconData icon, String text, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(children: [Icon(icon, size: 14, color: color), const SizedBox(width: 8), Text(text, style: const TextStyle(fontSize: 12, color: Colors.black54))]),
     );
   }
 
   Future<void> _deleteOrder(String collection, String id) async {
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user!.uid)
-        .collection(collection)
-        .doc(id)
-        .delete();
-  }
-
-    /// Карточка срочной доставки
-  Widget buildDeliveryOrderCard(DeliveryOrder order) {
-    // Логика активации точек (используем новые поля из модели)
-    final acceptedActive = order.acceptedAt != null;       // Курьер принял
-    final inProgressActive = order.inProgressAt != null;   // Курьер в пути
-    final deliveredActive = order.deliveredAt != null;     // Посылка у клиента
-
-    String currentStatus() {
-      if (deliveredActive) return 'Посылка доставлена';
-      if (inProgressActive) return 'Курьер везет вашу посылку';
-      if (acceptedActive) return 'Курьер принял заказ';
-      if (order.status == 'cancelled') return 'Заказ отменен';
-      return 'Поиск курьера...';
-    }
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      elevation: 4,
-      shadowColor: Colors.deepOrange.withOpacity(0.4),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // 🔹 Обернул только текст в Expanded, чтобы он не выталкивал корзину
-                Expanded(
-                  child: Text(
-                    'Срочная доставка от ${order.createdAt.toLocal().toString().split('.')[0]}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    overflow: TextOverflow.ellipsis, // Защита от вылета текста
-                    maxLines: 1,
-                  ),
-                ),
-                // Удаление как в еде
-                if (deliveredActive || order.status == 'cancelled')
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                    onPressed: () => _deleteOrder('delivery_orders', order.id),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Маршрут
-            Row(
-              children: [
-                const Icon(Icons.location_on, size: 18, color: Colors.blue),
-                const SizedBox(width: 8),
-                Expanded(child: Text('Откуда: ${order.pickup.latitude.toStringAsFixed(4)}, ${order.pickup.longitude.toStringAsFixed(4)}', style: const TextStyle(fontSize: 13))),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                const Icon(Icons.flag, size: 18, color: Colors.red),
-                const SizedBox(width: 8),
-                Expanded(child: Text('Куда: ${order.dropoff.latitude.toStringAsFixed(4)}, ${order.dropoff.longitude.toStringAsFixed(4)}', style: const TextStyle(fontSize: 13))),
-              ],
-            ),
-
-            const SizedBox(height: 12),
-            Text('Итого: ${order.totalCost.toStringAsFixed(0)} ₽',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 12),
-
-            // Прогресс-бар (ВСЁ КАК БЫЛО)
-            Row(
-              children: [
-                _statusCircle(true, Icons.fiber_new, 'Создан'),
-                _line(acceptedActive || inProgressActive || deliveredActive),
-                _statusCircle(acceptedActive, Icons.person_pin_circle, 'Принят'),
-                _line(inProgressActive || deliveredActive),
-                _statusCircle(inProgressActive, Icons.directions_bike, 'В пути'),
-                _line(deliveredActive),
-                _statusCircle(deliveredActive, Icons.check_circle, 'Доставлено'),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(currentStatus(),
-                style: TextStyle(color: Colors.grey[700], fontSize: 12)),
-          ],
-        ),
-      ),
-    );
-  }
-
-
-  /// Карточка городской доставки
-  /// Карточка городской доставки
-  Widget buildCityDeliveryOrderCard(CityDeliveryOrder order) {
-    // Логика активации точек по времени (как в твоем примере)
-    final acceptedActive = order.acceptedAt != null;       // Принят
-    final inProgressActive = order.inProgressAt != null;   // В пути
-    final deliveredActive = order.deliveredAt != null;     // Доставлено
-
-    String currentStatus() {
-      if (deliveredActive) return 'Доставка завершена';
-      if (inProgressActive) return 'Машина в пути к вам';
-      if (acceptedActive) return 'Заказ принят водителем';
-      if (order.status == 'cancelled') return 'Заказ отменен';
-      return 'Поиск машины...';
-    }
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      elevation: 4,
-      shadowColor: Colors.deepOrange.withOpacity(0.4),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // 🔹 Защита от Overflow
-                Expanded(
-                  child: Text(
-                    'Городская доставка от ${order.createdAt.toLocal().toString().split('.')[0]}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                ),
-                // Корзина удаления
-                if (deliveredActive || order.status == 'cancelled')
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                    onPressed: () => _deleteOrder('delivery_orders', order.id),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Маршрут (используем адреса текстом)
-            Row(
-              children: [
-                const Icon(Icons.location_on, size: 18, color: Colors.blue),
-                const SizedBox(width: 8),
-                Expanded(child: Text('Откуда: ${order.fromAddress}', style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                const Icon(Icons.flag, size: 18, color: Colors.red),
-                const SizedBox(width: 8),
-                Expanded(child: Text('Куда: ${order.toAddress}', style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
-              ],
-            ),
-
-            const SizedBox(height: 8),
-            // Опции заказа
-            Text(
-              'Опции: Кузов ${order.bodyType}, Грузчики: ${order.loaders}, Сопровождающий: ${order.escort}',
-              style: TextStyle(fontSize: 12, color: Colors.grey[800]),
-            ),
-
-            const SizedBox(height: 12),
-            Text('Итого: ${order.totalPrice.toStringAsFixed(0)} ₽',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepOrange)),
-            const SizedBox(height: 12),
-
-            // Прогресс-бар (Идентичный твоему примеру)
-            Row(
-              children: [
-                _statusCircle(true, Icons.fiber_new, 'Создан'),
-                _line(acceptedActive || inProgressActive || deliveredActive),
-                _statusCircle(acceptedActive, Icons.person_pin_circle, 'Принят'),
-                _line(inProgressActive || deliveredActive),
-                _statusCircle(inProgressActive, Icons.local_shipping, 'В пути'), // Иконка грузовика для города
-                _line(deliveredActive),
-                _statusCircle(deliveredActive, Icons.check_circle, 'Доставлено'),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(currentStatus(),
-                style: TextStyle(color: Colors.grey[700], fontSize: 12)),
-          ],
-        ),
-      ),
-    );
-  }
-
-
-  /// Карточка межгородской доставки
-  Widget buildMejCityDeliveryOrderCard(MejCityDeliveryOrder order) {
-    // Логика активации точек (используем новые поля из модели по твоему примеру)
-    final acceptedActive = order.acceptedAt != null;       // Курьер принял
-    final inProgressActive = order.inProgressAt != null;   // Курьер в пути
-    final deliveredActive = order.deliveredAt != null;     // Посылка у клиента
-
-    String currentStatus() {
-      if (deliveredActive) return 'Доставлено в другой город';
-      if (inProgressActive) return 'Груз в пути по межгороду';
-      if (acceptedActive) return 'Водитель назначен';
-      if (order.status == 'cancelled') return 'Заказ отменен';
-      return 'Поиск машины для межгорода...';
-    }
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      elevation: 4,
-      shadowColor: Colors.deepOrange.withOpacity(0.4),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // 🔹 Обернул текст в Expanded, чтобы не было Overflow из-за даты
-                Expanded(
-                  child: Text(
-                    'Межгород от ${order.createdAt.toLocal().toString().split('.')[0]}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                ),
-                // Удаление (появляется только в финале или при отмене)
-                if (deliveredActive || order.status == 'cancelled')
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                    onPressed: () => _deleteOrder('delivery_orders', order.id),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Маршрут
-            Row(
-              children: [
-                const Icon(Icons.location_on, size: 18, color: Colors.blue),
-                const SizedBox(width: 8),
-                Expanded(child: Text('Откуда: ${order.fromAddress}', style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                const Icon(Icons.flag, size: 18, color: Colors.red),
-                const SizedBox(width: 8),
-                Expanded(child: Text('Куда: ${order.toAddress}', style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
-              ],
-            ),
-
-            const SizedBox(height: 8),
-            // Доп. инфо для межгорода
-            Text(
-              'Кузов: ${order.bodyType}, Грузчики: ${order.loaders}, Сопровождение: ${order.escort}',
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-
-            const SizedBox(height: 12),
-            Text('Итого: ${order.totalPrice.toStringAsFixed(0)} ₽',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 12),
-
-            // Прогресс-бар (Идентичный твоему примеру со срочной доставкой)
-            Row(
-              children: [
-                _statusCircle(true, Icons.fiber_new, 'Создан'),
-                _line(acceptedActive || inProgressActive || deliveredActive),
-                _statusCircle(acceptedActive, Icons.person_pin_circle, 'Принят'),
-                _line(inProgressActive || deliveredActive),
-                _statusCircle(inProgressActive, Icons.local_shipping, 'В пути'), // Иконка фуры для межгорода
-                _line(deliveredActive),
-                _statusCircle(deliveredActive, Icons.check_circle, 'Прибыл'),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(currentStatus(),
-                style: TextStyle(color: Colors.grey[700], fontSize: 12)),
-          ],
-        ),
-      ),
-    );
+    await FirebaseFirestore.instance.collection('users').doc(user!.uid).collection(collection).doc(id).delete();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (user == null) {
-      return const Center(child: Text('Вы не вошли в систему'));
-    }
+    if (user == null) return const Center(child: Text('Авторизуйтесь для просмотра'));
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FD),
       appBar: AppBar(
-        title: const Text('Мои заказы'),
-        backgroundColor: Colors.deepOrange,
+        title: const Text('Статус заказов', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900)),
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
       ),
       body: StreamBuilder<List<Order>>(
         stream: ordersStream,
-        builder: (context, orderSnapshot) {
-          final orders = orderSnapshot.data ?? [];
-
+        builder: (context, snapshot) {
           return StreamBuilder<List<DeliveryOrder>>(
             stream: deliveryStream,
-            builder: (context, deliverySnapshot) {
-              final deliveries = deliverySnapshot.data ?? [];
-
+            builder: (context, snapshotDel) {
               return StreamBuilder<List<CityDeliveryOrder>>(
                 stream: cityDeliveryStream,
-                builder: (context, citySnapshot) {
-                  final cityOrders = citySnapshot.data ?? [];
-
+                builder: (context, snapshotCity) {
                   return StreamBuilder<List<MejCityDeliveryOrder>>(
                     stream: mejCityDeliveryStream,
-                    builder: (context, mejSnapshot) {
-                      final mejCityOrders = mejSnapshot.data ?? [];
-
-                      // Объединяем все четыре типа заказов
-                      final combinedList = [
-                        ...orders.map((o) => {'type': 'food', 'order': o}),
-                        ...deliveries.map((d) =>
-                        {
-                          'type': 'delivery',
-                          'order': d
-                        }),
-                        ...cityOrders.map((c) => {'type': 'city', 'order': c}),
-                        ...mejCityOrders.map((m) =>
-                        {
-                          'type': 'mejCity',
-                          'order': m
-                        }),
+                    builder: (context, snapshotMej) {
+                      final combined = [
+                        ...(snapshot.data ?? []).map((o) => {'type': 'food', 'order': o}),
+                        ...(snapshotDel.data ?? []).map((d) => {'type': 'delivery', 'order': d}),
+                        ...(snapshotCity.data ?? []).map((c) => {'type': 'city', 'order': c}),
+                        ...(snapshotMej.data ?? []).map((m) => {'type': 'mej', 'order': m}),
                       ];
 
-                      // Сортируем по дате
-                      combinedList.sort((a, b) {
-                        DateTime dateA = a['type'] == 'food'
-                            ? (a['order'] as Order).dateTime
-                            : a['type'] == 'delivery'
-                            ? (a['order'] as DeliveryOrder).createdAt
-                            : a['type'] == 'city'
-                            ? (a['order'] as CityDeliveryOrder).createdAt
-                            : (a['order'] as MejCityDeliveryOrder).createdAt;
+                      combined.sort((a, b) => _getOrderDate(b).compareTo(_getOrderDate(a)));
 
-                        DateTime dateB = b['type'] == 'food'
-                            ? (b['order'] as Order).dateTime
-                            : b['type'] == 'delivery'
-                            ? (b['order'] as DeliveryOrder).createdAt
-                            : b['type'] == 'city'
-                            ? (b['order'] as CityDeliveryOrder).createdAt
-                            : (b['order'] as MejCityDeliveryOrder).createdAt;
-
-                        return dateB.compareTo(dateA);
-                      });
-
-                      if (combinedList.isEmpty) {
-                        return const Center(
-                          child: Text('Вы ещё не делали заказов',
-                              style: TextStyle(fontSize: 16)),
-                        );
+                      if (combined.isEmpty) {
+                        return Center(child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.query_stats_rounded, size: 60, color: Colors.grey[300]),
+                            const SizedBox(height: 16),
+                            const Text('Активных заказов нет', style: TextStyle(color: Colors.grey)),
+                          ],
+                        ));
                       }
 
                       return ListView.builder(
-                        padding: const EdgeInsets.all(12),
-                        itemCount: combinedList.length,
+                        padding: const EdgeInsets.all(16),
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: combined.length,
                         itemBuilder: (context, index) {
-                          final item = combinedList[index];
-                          switch (item['type']) {
-                            case 'food':
-                              return buildFoodOrderCard(item['order'] as Order);
-                            case 'delivery':
-                              return buildDeliveryOrderCard(
-                                  item['order'] as DeliveryOrder);
-                            case 'city':
-                              return buildCityDeliveryOrderCard(
-                                  item['order'] as CityDeliveryOrder);
-                            case 'mejCity':
-                              return buildMejCityDeliveryOrderCard(
-                                  item['order'] as MejCityDeliveryOrder);
-                            default:
-                              return const SizedBox.shrink();
-                          }
+                          final item = combined[index];
+                          final type = item['type'];
+                          final order = item['order'];
+
+                          if (type == 'food') return buildFoodOrderCard(order as Order);
+                          if (type == 'delivery') return buildDeliveryOrderCard(order as DeliveryOrder);
+                          if (type == 'city') return buildCargoCard('Городская доставка', order, Colors.green, 'cityOrders');
+                          return buildCargoCard('Межгородская доставка', order, Colors.blueGrey, 'mejCityOrders');
                         },
                       );
                     },
@@ -601,5 +385,13 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
       ),
     );
   }
-}
 
+  DateTime _getOrderDate(Map<String, dynamic> item) {
+    final type = item['type'];
+    final o = item['order'];
+    if (type == 'food') return (o as Order).dateTime;
+    if (type == 'delivery') return (o as DeliveryOrder).createdAt;
+    if (type == 'city') return (o as CityDeliveryOrder).createdAt;
+    return (o as MejCityDeliveryOrder).createdAt;
+  }
+}

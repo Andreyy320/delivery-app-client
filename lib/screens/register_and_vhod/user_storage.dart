@@ -64,5 +64,4 @@ class UserStorage {
     data['uid'] = uid; // добавляем поле uid
     return data;
   }
-
 }

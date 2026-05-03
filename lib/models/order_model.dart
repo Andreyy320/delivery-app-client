@@ -1,12 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:latlong2/latlong.dart';
-
 import '../screens/Menu/Cart_data.dart';
 import 'dish_model.dart';
 
 class Order {
-  final String id; // Это поле теперь будет работать правильно
-
+  final String id;
   final List<CartItem> items;
   final LatLng deliveryLocation;
   final String comment;
@@ -15,6 +13,10 @@ class Order {
   final DateTime dateTime;
   final String status;
   final String? shopId;
+  final String type;
+
+  // 🔹 НОВОЕ: ID курьера, чтобы клиент знал за кем следить
+  final String? courierId;
 
   final DateTime? startedAt;
   final DateTime? readyAt;
@@ -22,8 +24,13 @@ class Order {
   final DateTime? inProgressAt;
   final DateTime? deliveredAt;
 
+  // 🔹 НОВОЕ: Геттеры для совместимости с экраном отслеживания
+  // Они просто отдают широту и долготу из твоего существующего deliveryLocation
+  double get clientLat => deliveryLocation.latitude;
+  double get clientLng => deliveryLocation.longitude;
+
   Order({
-    required this.id, // ID обязателен
+    required this.id,
     required this.items,
     required this.deliveryLocation,
     required this.comment,
@@ -31,6 +38,8 @@ class Order {
     required this.total,
     required this.dateTime,
     required this.status,
+    required this.type,
+    this.courierId, // 🔹 Добавляем в конструктор
     this.shopId,
     this.startedAt,
     this.readyAt,
@@ -40,13 +49,13 @@ class Order {
   });
 
   Map<String, dynamic> toJson() => {
-    // ID обычно не пишем в само тело JSON, так как он является именем документа
     'items': items.map((e) => {
       'name': e.dish.name,
       'price': e.dish.price,
       'description': e.dish.description,
       'category': e.dish.category,
       'imagePath': e.dish.imagePath,
+      'weight': e.dish.weight,
       'quantity': e.quantity,
       'shopId': e.shopId,
     }).toList(),
@@ -59,6 +68,8 @@ class Order {
     'total': total,
     'dateTime': dateTime.toIso8601String(),
     'status': status,
+    'type': type,
+    'courierId': courierId, // 🔹 Сохраняем ID курьера
     'shopId': shopId,
     'startedAt': startedAt?.toIso8601String(),
     'readyAt': readyAt?.toIso8601String(),
@@ -67,10 +78,9 @@ class Order {
     'deliveredAt': deliveredAt?.toIso8601String(),
   };
 
-  /// Создание из JSON (добавил String id как аргумент)
   factory Order.fromJson(String id, Map<String, dynamic> json) {
     return Order(
-      id: id, // ПРИСВАИВАЕМ ID
+      id: id,
       items: (json['items'] as List).map((e) => CartItem(
         dish: Dish(
           name: e['name'],
@@ -78,6 +88,7 @@ class Order {
           description: e['description'],
           category: e['category'],
           imagePath: e['imagePath'],
+          weight: e['weight'] ?? '0',
         ),
         quantity: e['quantity'],
         shopId: e['shopId'] ?? 'default',
@@ -88,6 +99,8 @@ class Order {
       total: (json['total'] as num).toDouble(),
       dateTime: DateTime.parse(json['dateTime']),
       status: json['status'] ?? 'preparing',
+      type: json['category'] ?? 'restaurant',
+      courierId: json['courierId'], // 🔹 Получаем из JSON
       shopId: json['shopId'],
       startedAt: json['startedAt'] != null ? DateTime.parse(json['startedAt']) : null,
       readyAt: json['readyAt'] != null ? DateTime.parse(json['readyAt']) : null,
@@ -97,10 +110,7 @@ class Order {
     );
   }
 
-  /// Создание из Firestore (исправил присвоение ID)
   factory Order.fromFirestore(String id, Map<String, dynamic> data) {
-    // В Firestore обычно используется createdAt (Timestamp),
-    // проверим разные варианты ключей для даты
     DateTime date = (data['createdAt'] as Timestamp?)?.toDate() ??
         (data['dateTime'] is String ? DateTime.parse(data['dateTime']) : DateTime.now());
 
@@ -112,14 +122,15 @@ class Order {
     }
 
     return Order(
-      id: id, // ПРИСВАИВАЕМ ID ИЗ ДОКУМЕНТА
+      id: id,
       items: (data['items'] as List<dynamic>).map((e) => CartItem(
         dish: Dish(
           name: e['name'] ?? e['dish'] ?? 'Без имени',
           price: (e['price'] as num).toDouble(),
           description: e['description'] ?? '',
           category: e['category'] ?? '',
-          imagePath: e['imagePath'] ?? 'assets/default.png',
+          imagePath: e['imagePath'] ?? e['imageUrl'] ?? '',
+          weight: e['weight']?.toString() ?? '0',
         ),
         quantity: e['quantity'] ?? 1,
         shopId: e['shopId'] ?? 'default',
@@ -133,6 +144,8 @@ class Order {
       total: (data['total'] as num).toDouble(),
       dateTime: date,
       status: data['status'] ?? 'preparing',
+      type: data['category'] ?? 'restaurant',
+      courierId: data['courierId'], // 🔹 Получаем из Firestore
       shopId: data['shopId'],
       readyAt: _parseTimestamp('readyAt'),
       startedAt: _parseTimestamp('startedAt'),
