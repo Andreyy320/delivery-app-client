@@ -203,7 +203,7 @@ class _AptekaMenuScreenState extends State<AptekaMenuScreen> {
               Expanded(
                 child: ListView.builder(
                   controller: _scrollController,
-                  padding: const EdgeInsets.only(top: 10),
+                  padding: const EdgeInsets.only(top: 10, bottom: 20),
                   itemCount: _categories.length,
                   itemBuilder: (context, index) {
                     final category = _categories[index];
@@ -225,7 +225,8 @@ class _AptekaMenuScreenState extends State<AptekaMenuScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            childAspectRatio: 0.62, // Немного увеличил высоту для длинных описаний
+                            // Увеличили соотношение, чтобы карточка была длиннее вниз (под длинный текст)
+                            childAspectRatio: 0.52,
                             crossAxisSpacing: 16,
                             mainAxisSpacing: 16,
                           ),
@@ -288,13 +289,13 @@ class PharmacyItemCard extends StatelessWidget {
             ],
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. Картинка (занимает верхнюю часть)
-              Expanded(
-                flex: 12,
+              // 1. Блок с фото
+              AspectRatio(
+                aspectRatio: 1, // Делаем фото идеально квадратным
                 child: Container(
-                  margin: const EdgeInsets.all(8),
+                  margin: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF3F4F6),
                     borderRadius: BorderRadius.circular(20),
@@ -303,10 +304,10 @@ class PharmacyItemCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                     child: Stack(
                       children: [
-                        Center(
+                        Positioned.fill(
                           child: Image.network(
                             dish.imagePath,
-                            fit: BoxFit.contain,
+                            fit: BoxFit.cover,
                             errorBuilder: (c, e, s) => const Icon(Icons.medication_liquid_rounded, color: Colors.grey, size: 40),
                           ),
                         ),
@@ -314,8 +315,12 @@ class PharmacyItemCard extends StatelessWidget {
                           top: 8, right: 8,
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(10)),
-                            child: Text("${dish.price.toInt()} Руб", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.9),
+                                borderRadius: BorderRadius.circular(10)
+                            ),
+                            child: Text("${dish.price.toInt()} ₽",
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                           ),
                         )
                       ],
@@ -324,46 +329,41 @@ class PharmacyItemCard extends StatelessWidget {
                 ),
               ),
 
-              // 2. Инфо-блок (занимает всё пространство до кнопки)
-              Expanded(
-                flex: 9,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                          dish.name,
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, height: 1.1)
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                          "${dish.weight} ${getUnit(dish.category)}",
-                          style: TextStyle(color: Colors.blueAccent[200], fontSize: 11, fontWeight: FontWeight.bold)
-                      ),
-                      const SizedBox(height: 4),
-                      // Текст описания теперь гибкий и виден полностью (до 3-4 строк)
-                      Flexible(
-                        child: SingleChildScrollView(
-                          physics: const NeverScrollableScrollPhysics(),
-                          child: Text(
-                              dish.description,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 10, color: Colors.black38, height: 1.1)
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+              // 2. Инфо-блок (расширяется под текст)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                child: Column(
+                  children: [
+                    Text(
+                        dish.name,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, height: 1.1)
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                        "${dish.weight} ${getUnit(dish.category)}",
+                        style: TextStyle(color: Colors.blueAccent[200], fontSize: 11, fontWeight: FontWeight.bold)
+                    ),
+                    const SizedBox(height: 6),
+                    // ОПИСАНИЕ: Теперь разрешаем до 5 строк, чтобы влезло длинное предложение
+                    Text(
+                        dish.description,
+                        textAlign: TextAlign.center,
+                        maxLines: 5,
+                        overflow: TextOverflow.visible, // Показываем весь текст
+                        style: const TextStyle(fontSize: 10, color: Colors.black45, height: 1.1)
+                    ),
+                  ],
                 ),
               ),
 
-              // 3. Кнопка (всегда в самом низу)
+              const Spacer(), // Прижимает кнопку к самому низу карточки
+
+              // 3. Кнопка
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
                 child: GestureDetector(
                   onTap: () => addToCartItem(userId, shopId, dish, context: context),
                   child: AnimatedContainer(
