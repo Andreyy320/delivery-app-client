@@ -225,8 +225,8 @@ class _AptekaMenuScreenState extends State<AptekaMenuScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            // Увеличили соотношение, чтобы карточка была длиннее вниз (под длинный текст)
-                            childAspectRatio: 0.52,
+                            // Фиксированное соотношение для аптечного стиля
+                            childAspectRatio: 0.50,
                             crossAxisSpacing: 16,
                             mainAxisSpacing: 16,
                           ),
@@ -291,9 +291,9 @@ class PharmacyItemCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. Блок с фото
+              // 1. Блок с фото (Квадрат)
               AspectRatio(
-                aspectRatio: 1, // Делаем фото идеально квадратным
+                aspectRatio: 1,
                 child: Container(
                   margin: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
@@ -329,37 +329,46 @@ class PharmacyItemCard extends StatelessWidget {
                 ),
               ),
 
-              // 2. Инфо-блок (расширяется под текст)
+              // 2. Инфо-блок с фиксированными высотами
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 child: Column(
                   children: [
-                    Text(
-                        dish.name,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, height: 1.1)
+                    // Название - фиксируем на 2 строки (высота ~34)
+                    SizedBox(
+                      height: 34,
+                      child: Text(
+                          dish.name,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, height: 1.2)
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                         "${dish.weight} ${getUnit(dish.category)}",
                         style: TextStyle(color: Colors.blueAccent[200], fontSize: 11, fontWeight: FontWeight.bold)
                     ),
-                    const SizedBox(height: 6),
-                    // ОПИСАНИЕ: Теперь разрешаем до 5 строк, чтобы влезло длинное предложение
-                    Text(
-                        dish.description,
-                        textAlign: TextAlign.center,
-                        maxLines: 5,
-                        overflow: TextOverflow.visible, // Показываем весь текст
-                        style: const TextStyle(fontSize: 10, color: Colors.black45, height: 1.1)
+                    const SizedBox(height: 4),
+                    // Описание - фиксируем высоту (под 5 строк, высота ~56)
+                    SizedBox(
+                      height: 56,
+                      child: Text(
+                          dish.description,
+                          textAlign: TextAlign.center,
+                          maxLines: 5,
+                          // Если текста меньше, будет пустое пространство, если больше - обрежется.
+                          // Это гарантирует, что кнопка ниже не "прыгнет".
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 10, color: Colors.black45, height: 1.1)
+                      ),
                     ),
                   ],
                 ),
               ),
 
-              const Spacer(), // Прижимает кнопку к самому низу карточки
+              const Spacer(), // Занимает всё свободное место до кнопки
 
               // 3. Кнопка
               Padding(
