@@ -225,7 +225,6 @@ class _RestaurantMenuScreenState extends State<RestaurantMenuScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            // Чуть уменьшил коэффициент (был 0.52), чтобы карточка стала выше
                             childAspectRatio: 0.48,
                             crossAxisSpacing: 16,
                             mainAxisSpacing: 16,
@@ -334,15 +333,21 @@ class DishCardWithStatus extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 child: Column(
                   children: [
-                    // УВЕЛИЧИЛ высоту с 38 до 52 и maxLines до 3
                     SizedBox(
                       height: 52,
-                      child: Text(
-                        dish.name,
-                        textAlign: TextAlign.center,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, height: 1.2),
+                      child: Center(
+                        child: Text(
+                          dish.name,
+                          textAlign: TextAlign.center,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13, // Немного уменьшил для лучшей вместимости
+                            fontWeight: FontWeight.w800,
+                            height: 1.1,  // Уплотнил строки
+                            letterSpacing: -0.3, // Сблизил буквы, чтобы слова не разрывались
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 2),
