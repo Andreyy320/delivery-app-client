@@ -37,6 +37,13 @@ class _FloareMenuScreenState extends State<FloareMenuScreen> {
     _scrollController.addListener(_onScroll);
   }
 
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _categoryScrollController.dispose();
+    super.dispose();
+  }
+
   void _onScroll() {
     if (_isManualScrolling || _categories.isEmpty) return;
     for (var category in _categories) {
@@ -44,7 +51,6 @@ class _FloareMenuScreenState extends State<FloareMenuScreen> {
       if (context != null) {
         final box = context.findRenderObject() as RenderBox;
         final offset = box.localToGlobal(Offset.zero).dy;
-        // 220 — примерный порог, когда категория считается активной вверху
         if (offset >= 0 && offset < 220) {
           if (_activeCategory != category) {
             setState(() => _activeCategory = category);
@@ -119,19 +125,17 @@ class _FloareMenuScreenState extends State<FloareMenuScreen> {
             .collection('categories')
             .doc(widget.shopId)
             .collection('menu')
-            .where('isAvailable', isEqualTo: true) // <--- ДОБАВЬТЕ ЭТУ СТРОКУ
+            .where('isAvailable', isEqualTo: true)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.hasError) return const Center(child: Text('Ошибка загрузки')); // Рекомендую добавить обработку ошибки
+          if (snapshot.hasError) return const Center(child: Text('Ошибка загрузки'));
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.deepOrange));
 
           final allItems = snapshot.data!.docs.map((doc) => Dish.fromFirestore(doc)).toList();
-          // ... остальной код без изменений
-         final filteredItems = allItems.where((item) =>
+          final filteredItems = allItems.where((item) =>
           item.name.toLowerCase().contains(_searchQuery) ||
               item.category.toLowerCase().contains(_searchQuery)).toList();
 
-          // Группировка категорий
           final currentCategories = filteredItems.map((e) => e.category).toSet().toList();
           if (_categories.join() != currentCategories.join()) {
             _categories = currentCategories;
@@ -143,7 +147,6 @@ class _FloareMenuScreenState extends State<FloareMenuScreen> {
 
           return Column(
             children: [
-              // Поиск
               Container(
                 color: Colors.white,
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -164,7 +167,6 @@ class _FloareMenuScreenState extends State<FloareMenuScreen> {
                   ),
                 ),
               ),
-              // Горизонтальный список категорий
               Container(
                 height: 60,
                 color: Colors.white,
@@ -198,11 +200,10 @@ class _FloareMenuScreenState extends State<FloareMenuScreen> {
                   },
                 ),
               ),
-              // Основной контент
               Expanded(
                 child: ListView.builder(
                   controller: _scrollController,
-                  padding: const EdgeInsets.only(top: 10),
+                  padding: const EdgeInsets.only(top: 10, bottom: 20),
                   itemCount: _categories.length,
                   itemBuilder: (context, index) {
                     final category = _categories[index];
@@ -222,7 +223,7 @@ class _FloareMenuScreenState extends State<FloareMenuScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            childAspectRatio: 0.65,
+                            childAspectRatio: 0.52, // Соотношение для фиксации высоты
                             crossAxisSpacing: 16,
                             mainAxisSpacing: 16,
                           ),
@@ -261,7 +262,6 @@ class DishCardWithStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Автоматическая подстановка единиц измерения
     String getUnit(String category) {
       final cat = category.toLowerCase();
       if (cat.contains('напитки') || cat.contains('сок') || cat.contains('beverages')) return "мл";
@@ -287,12 +287,13 @@ class DishCardWithStatus extends StatelessWidget {
             ],
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                flex: 5,
+              // 1. Блок фото (Квадрат)
+              AspectRatio(
+                aspectRatio: 1,
                 child: Container(
-                  margin: const EdgeInsets.all(8),
+                  margin: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF3F4F6),
                     borderRadius: BorderRadius.circular(20),
@@ -301,10 +302,10 @@ class DishCardWithStatus extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                     child: Stack(
                       children: [
-                        Center(
+                        Positioned.fill(
                           child: Image.network(
                             dish.imagePath,
-                            fit: BoxFit.contain,
+                            fit: BoxFit.cover,
                             errorBuilder: (c, e, s) => const Icon(Icons.shopping_bag_outlined, color: Colors.grey, size: 40),
                           ),
                         ),
@@ -313,7 +314,7 @@ class DishCardWithStatus extends StatelessWidget {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(10)),
-                            child: Text("${dish.price.toInt()} Руб", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            child: Text("${dish.price.toInt()} ₽", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                           ),
                         )
                       ],
@@ -321,39 +322,64 @@ class DishCardWithStatus extends StatelessWidget {
                   ),
                 ),
               ),
-              Expanded(
-                flex: 4,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Column(
-                    children: [
-                      Text(dish.name, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 2),
-                      Text("${dish.weight} ${getUnit(dish.category)}",
-                          style: TextStyle(color: Colors.deepOrange[300], fontSize: 12, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text(dish.description, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11, color: Colors.black38, height: 1.1)),
-                    ],
-                  ),
+
+              // 2. Инфо-блок с фиксированными высотами
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                child: Column(
+                  children: [
+                    // Название (фиксированно 2 строки)
+                    SizedBox(
+                      height: 38,
+                      child: Text(
+                          dish.name,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, height: 1.2)
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                        "${dish.weight} ${getUnit(dish.category)}",
+                        style: TextStyle(color: Colors.deepOrange[300], fontSize: 11, fontWeight: FontWeight.bold)
+                    ),
+                    const SizedBox(height: 4),
+                    // Описание (фиксированно 3 строки)
+                    SizedBox(
+                      height: 40,
+                      child: Text(
+                          dish.description,
+                          textAlign: TextAlign.center,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 10, color: Colors.black45, height: 1.1)
+                      ),
+                    ),
+                  ],
                 ),
               ),
+
+              const Spacer(), // Занимает всё свободное место до кнопки
+
+              // 3. Кнопка
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
                 child: GestureDetector(
                   onTap: () => addToCartItem(userId, shopId, dish, context: context),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
-                    height: 40,
+                    height: 38,
                     decoration: BoxDecoration(
                       color: added ? Colors.black : Colors.deepOrange,
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: added ? [] : [BoxShadow(color: Colors.deepOrange.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
                     ),
                     child: Center(
-                      child: Text(added ? "В КОРЗИНЕ" : "ДОБАВИТЬ",
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                      child: Text(
+                          added ? "В КОРЗИНЕ" : "ДОБАВИТЬ",
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)
+                      ),
                     ),
                   ),
                 ),
@@ -366,7 +392,6 @@ class DishCardWithStatus extends StatelessWidget {
   }
 }
 
-// Виджет счетчика товаров в корзине
 Widget PositionByRelative(String count) {
   return Positioned(
     right: 4, top: 10,

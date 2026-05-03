@@ -36,6 +36,13 @@ class _RestaurantMenuScreenState extends State<RestaurantMenuScreen> {
     _scrollController.addListener(_onScroll);
   }
 
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _categoryScrollController.dispose();
+    super.dispose();
+  }
+
   void _onScroll() {
     if (_isManualScrolling || _categories.isEmpty) return;
     for (var category in _categories) {
@@ -117,10 +124,10 @@ class _RestaurantMenuScreenState extends State<RestaurantMenuScreen> {
             .collection('categories')
             .doc(widget.shopId)
             .collection('menu')
-            .where('isAvailable', isEqualTo: true) // <--- ДОБАВЬТЕ ЭТУ СТРОКУ
+            .where('isAvailable', isEqualTo: true)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.hasError) return const Center(child: Text('Ошибка загрузки')); // Рекомендую добавить обработку ошибки
+          if (snapshot.hasError) return const Center(child: Text('Ошибка загрузки'));
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.deepOrange));
 
           final allItems = snapshot.data!.docs.map((doc) => Dish.fromFirestore(doc)).toList();
@@ -196,11 +203,13 @@ class _RestaurantMenuScreenState extends State<RestaurantMenuScreen> {
               Expanded(
                 child: ListView.builder(
                   controller: _scrollController,
-                  padding: const EdgeInsets.only(top: 10),
+                  padding: const EdgeInsets.only(top: 10, bottom: 20),
                   itemCount: _categories.length,
                   itemBuilder: (context, index) {
                     final category = _categories[index];
                     final itemsInCategory = filteredItems.where((i) => i.category == category).toList();
+
+                    if (itemsInCategory.isEmpty) return const SizedBox.shrink();
 
                     return Column(
                       key: _categoryKeys[category],
@@ -216,7 +225,8 @@ class _RestaurantMenuScreenState extends State<RestaurantMenuScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            childAspectRatio: 0.65,
+                            // Соотношение сторон для фиксации высоты всей карточки
+                            childAspectRatio: 0.52,
                             crossAxisSpacing: 16,
                             mainAxisSpacing: 16,
                           ),
@@ -249,7 +259,6 @@ class DishCardWithStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     final userId = FirebaseAuth.instance.currentUser?.uid ?? "";
 
-    // 🔹 Логика определения: граммы или миллилитры
     String getUnit(String category) {
       final cat = category.toLowerCase();
       if (cat.contains('напитки') ||
@@ -257,8 +266,6 @@ class DishCardWithStatus extends StatelessWidget {
           cat.contains('вино') ||
           cat.contains('кофе') ||
           cat.contains('чай') ||
-          cat.contains('drinks') ||
-          cat.contains('beverages') ||
           cat.contains('коктейли')) {
         return "мл";
       }
@@ -284,12 +291,13 @@ class DishCardWithStatus extends StatelessWidget {
             ],
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                flex: 5,
+              // 1. Фото (Квадратное)
+              AspectRatio(
+                aspectRatio: 1,
                 child: Container(
-                  margin: const EdgeInsets.all(8),
+                  margin: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF3F4F6),
                     borderRadius: BorderRadius.circular(20),
@@ -298,10 +306,10 @@ class DishCardWithStatus extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                     child: Stack(
                       children: [
-                        Center(
+                        Positioned.fill(
                           child: Image.network(
                             dish.imagePath,
-                            fit: BoxFit.contain,
+                            fit: BoxFit.cover,
                             errorBuilder: (c, e, s) => const Icon(Icons.restaurant, color: Colors.grey, size: 40),
                           ),
                         ),
@@ -309,8 +317,12 @@ class DishCardWithStatus extends StatelessWidget {
                           top: 8, right: 8,
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(10)),
-                            child: Text("${dish.price.toInt()} Руб", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.9),
+                                borderRadius: BorderRadius.circular(10)
+                            ),
+                            child: Text("${dish.price.toInt()} ₽",
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                           ),
                         )
                       ],
@@ -318,39 +330,64 @@ class DishCardWithStatus extends StatelessWidget {
                   ),
                 ),
               ),
-              Expanded(
-                flex: 4,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Column(
-                    children: [
-                      Text(dish.name, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 2),
-                      // 🔹 Используем нашу новую логику единиц измерения
-                      Text("${dish.weight} ${getUnit(dish.category)}",
-                          style: TextStyle(color: Colors.deepOrange[300], fontSize: 12, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text(dish.description, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11, color: Colors.black38, height: 1.1)),
-                    ],
-                  ),
+
+              // 2. Текстовый блок
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                child: Column(
+                  children: [
+                    // Фиксированное место под название (2 строки)
+                    SizedBox(
+                      height: 38,
+                      child: Text(
+                        dish.name,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, height: 1.2),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      "${dish.weight} ${getUnit(dish.category)}",
+                      style: TextStyle(color: Colors.deepOrange[300], fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    // Фиксированное место под описание (3 строки для еды обычно достаточно)
+                    SizedBox(
+                      height: 40,
+                      child: Text(
+                        dish.description,
+                        textAlign: TextAlign.center,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 10, color: Colors.black45, height: 1.1),
+                      ),
+                    ),
+                  ],
                 ),
               ),
+
+              const Spacer(), // Прижимает кнопку к низу
+
+              // 3. Кнопка
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
                 child: GestureDetector(
-                  onTap: () => addToCartItem(userId, shopId, dish, context: context),                  child: AnimatedContainer(
+                  onTap: () => addToCartItem(userId, shopId, dish, context: context),
+                  child: AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
-                    height: 40,
+                    height: 38,
                     decoration: BoxDecoration(
                       color: added ? Colors.black : Colors.deepOrange,
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: added ? [] : [BoxShadow(color: Colors.deepOrange.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
                     ),
                     child: Center(
-                      child: Text(added ? "В КОРЗИНЕ" : "ДОБАВИТЬ",
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                      child: Text(
+                        added ? "В КОРЗИНЕ" : "ДОБАВИТЬ",
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
                     ),
                   ),
                 ),
