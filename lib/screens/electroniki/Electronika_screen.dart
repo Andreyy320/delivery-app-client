@@ -225,7 +225,7 @@ class _ElectronikaMenuScreenState extends State<ElectronikaMenuScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            childAspectRatio: 0.52, // Унифицированный размер
+                            childAspectRatio: 0.48, // Изменено с 0.52 для размещения длинных названий
                             crossAxisSpacing: 16,
                             mainAxisSpacing: 16,
                           ),
@@ -285,7 +285,6 @@ class DishCardWithStatus extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. Изображение товара
               AspectRatio(
                 aspectRatio: 1,
                 child: Container(
@@ -319,24 +318,22 @@ class DishCardWithStatus extends StatelessWidget {
                 ),
               ),
 
-              // 2. Инфо-блок с фиксированными высотами
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 child: Column(
                   children: [
-                    // Название (фикс 2 строки)
+                    // Высота увеличена до 52, maxLines до 3 для полного отображения названий
                     SizedBox(
-                      height: 38,
+                      height: 52,
                       child: Text(
                         dish.name,
                         textAlign: TextAlign.center,
-                        maxLines: 2,
+                        maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, height: 1.2),
                       ),
                     ),
                     const SizedBox(height: 4),
-                    // Описание/Характеристики (фикс 3 строки)
                     SizedBox(
                       height: 42,
                       child: Text(
@@ -351,9 +348,8 @@ class DishCardWithStatus extends StatelessWidget {
                 ),
               ),
 
-              const Spacer(), // Прижимает кнопку к низу
+              const Spacer(),
 
-              // 3. Кнопка действия
               Padding(
                 padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
                 child: GestureDetector(

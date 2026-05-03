@@ -225,8 +225,8 @@ class _RestaurantMenuScreenState extends State<RestaurantMenuScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            // Соотношение сторон для фиксации высоты всей карточки
-                            childAspectRatio: 0.52,
+                            // Чуть уменьшил коэффициент (был 0.52), чтобы карточка стала выше
+                            childAspectRatio: 0.48,
                             crossAxisSpacing: 16,
                             mainAxisSpacing: 16,
                           ),
@@ -293,7 +293,6 @@ class DishCardWithStatus extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. Фото (Квадратное)
               AspectRatio(
                 aspectRatio: 1,
                 child: Container(
@@ -331,18 +330,17 @@ class DishCardWithStatus extends StatelessWidget {
                 ),
               ),
 
-              // 2. Текстовый блок
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 child: Column(
                   children: [
-                    // Фиксированное место под название (2 строки)
+                    // УВЕЛИЧИЛ высоту с 38 до 52 и maxLines до 3
                     SizedBox(
-                      height: 38,
+                      height: 52,
                       child: Text(
                         dish.name,
                         textAlign: TextAlign.center,
-                        maxLines: 2,
+                        maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, height: 1.2),
                       ),
@@ -353,7 +351,6 @@ class DishCardWithStatus extends StatelessWidget {
                       style: TextStyle(color: Colors.deepOrange[300], fontSize: 11, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
-                    // Фиксированное место под описание (3 строки для еды обычно достаточно)
                     SizedBox(
                       height: 40,
                       child: Text(
@@ -368,9 +365,8 @@ class DishCardWithStatus extends StatelessWidget {
                 ),
               ),
 
-              const Spacer(), // Прижимает кнопку к низу
+              const Spacer(),
 
-              // 3. Кнопка
               Padding(
                 padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
                 child: GestureDetector(

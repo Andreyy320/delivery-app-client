@@ -225,7 +225,7 @@ class _ProductMenuScreenState extends State<ProductMenuScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            childAspectRatio: 0.52, // Соотношение сторон для вытянутой карточки
+                            childAspectRatio: 0.48, // Изменено с 0.52 для доп. высоты
                             crossAxisSpacing: 16,
                             mainAxisSpacing: 16,
                           ),
@@ -288,7 +288,6 @@ class ProductCardWidget extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. Изображение
               AspectRatio(
                 aspectRatio: 1,
                 child: Container(
@@ -320,18 +319,17 @@ class ProductCardWidget extends StatelessWidget {
                 ),
               ),
 
-              // 2. Инфо-блок с фиксированными высотами
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 child: Column(
                   children: [
-                    // Фикс высоты названия (2 строки)
+                    // Фикс высоты названия (3 строки теперь полностью видны)
                     SizedBox(
-                      height: 38,
+                      height: 52, // Увеличено с 38
                       child: Text(
                         product.name,
                         textAlign: TextAlign.center,
-                        maxLines: 2,
+                        maxLines: 3, // Увеличено с 2
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, height: 1.2),
                       ),
@@ -357,9 +355,8 @@ class ProductCardWidget extends StatelessWidget {
                 ),
               ),
 
-              const Spacer(), // Занимает всё свободное место до кнопки
+              const Spacer(),
 
-              // 3. Кнопка
               Padding(
                 padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
                 child: GestureDetector(
