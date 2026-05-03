@@ -225,7 +225,7 @@ class _AptekaMenuScreenState extends State<AptekaMenuScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            childAspectRatio: 0.65,
+                            childAspectRatio: 0.62, // Немного увеличил высоту для длинных описаний
                             crossAxisSpacing: 16,
                             mainAxisSpacing: 16,
                           ),
@@ -290,9 +290,9 @@ class PharmacyItemCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Картинка и ценник
+              // 1. Картинка (занимает верхнюю часть)
               Expanded(
-                flex: 5,
+                flex: 12,
                 child: Container(
                   margin: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -324,46 +324,61 @@ class PharmacyItemCard extends StatelessWidget {
                 ),
               ),
 
-              // Описание
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(dish.name, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 2),
-                    Text("${dish.weight} ${getUnit(dish.category)}",
-                        style: TextStyle(color: Colors.blueAccent[200], fontSize: 12, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 6),
-                    // Ограничиваем высоту описания, чтобы оно не налетало на кнопку
-                    SizedBox(
-                      height: 30,
-                      child: Text(dish.description, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11, color: Colors.black38, height: 1.1)),
-                    ),
-                  ],
+              // 2. Инфо-блок (занимает всё пространство до кнопки)
+              Expanded(
+                flex: 9,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                          dish.name,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, height: 1.1)
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                          "${dish.weight} ${getUnit(dish.category)}",
+                          style: TextStyle(color: Colors.blueAccent[200], fontSize: 11, fontWeight: FontWeight.bold)
+                      ),
+                      const SizedBox(height: 4),
+                      // Текст описания теперь гибкий и виден полностью (до 3-4 строк)
+                      Flexible(
+                        child: SingleChildScrollView(
+                          physics: const NeverScrollableScrollPhysics(),
+                          child: Text(
+                              dish.description,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 10, color: Colors.black38, height: 1.1)
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
 
-              const Spacer(), // Гарантирует, что кнопка будет в самом низу и не слипнется с текстом
-
-              // Кнопка
+              // 3. Кнопка (всегда в самом низу)
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
                 child: GestureDetector(
                   onTap: () => addToCartItem(userId, shopId, dish, context: context),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
-                    height: 40,
+                    height: 38,
                     decoration: BoxDecoration(
                       color: added ? Colors.black : Colors.deepOrange,
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: added ? [] : [BoxShadow(color: Colors.deepOrange.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
                     ),
                     child: Center(
-                      child: Text(added ? "В КОРЗИНЕ" : "КУПИТЬ",
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                      child: Text(
+                          added ? "В КОРЗИНЕ" : "КУПИТЬ",
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)
+                      ),
                     ),
                   ),
                 ),
