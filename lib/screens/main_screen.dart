@@ -24,6 +24,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   DateTime? _appStartTime;
+  StreamSubscription<User?>? _authSubscription; // Слушатель входа/выхода
 
   final List<GlobalKey<NavigatorState>> _navigatorKeys =
   List.generate(4, (_) => GlobalKey<NavigatorState>());
@@ -31,23 +32,36 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
-    _appStartTime = DateTime.now();
+    // Даем запас в пару секунд, чтобы не пропустить текущие обновления
+    _appStartTime = DateTime.now().subtract(const Duration(seconds: 2));
+
+    _initAuthListener();
     _restoreAuth();
   }
 
   @override
   void dispose() {
     _ordersSubscription?.cancel();
+    _authSubscription?.cancel();
     super.dispose();
+  }
+
+  // Автоматически запускает прослушивание заказов при логине
+  void _initAuthListener() {
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user != null) {
+        _startListeningToOrders(user.uid);
+      } else {
+        _ordersSubscription?.cancel();
+        _globalProcessedOrders.clear();
+      }
+    });
   }
 
   Future<void> _restoreAuth() async {
     final currentUser = await UserStorage.getCurrentUser();
     if (currentUser != null) {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        _startListeningToOrders(user.uid);
-      }
+      // Синхронизируем состояние
       authState.login();
       if (mounted) setState(() {});
     }
@@ -85,16 +99,22 @@ class _MainScreenState extends State<MainScreen> {
         final status = (data['status'] ?? '').toString();
         Timestamp? timestamp = data['createdAt'] as Timestamp?;
 
-        if (timestamp == null && change.type == DocumentChangeType.added) continue;
-        DateTime orderTime = timestamp?.toDate() ?? DateTime(2020);
-
-        if (_appStartTime != null && orderTime.isBefore(_appStartTime!)) {
-          _globalProcessedOrders[orderId] = status;
+        // Если это старый заказ (создан до запуска приложения), просто запоминаем статус
+        if (timestamp != null) {
+          DateTime orderTime = timestamp.toDate();
+          if (_appStartTime != null && orderTime.isBefore(_appStartTime!)) {
+            _globalProcessedOrders[orderId] = status;
+            continue;
+          }
+        } else if (change.type == DocumentChangeType.added) {
+          // Если метки времени еще нет (локальный кэш), пропускаем первый проход
           continue;
         }
 
+        // Если статус не изменился — выходим
         if (_globalProcessedOrders[orderId] == status) continue;
 
+        // Если статус новый или изменился — уведомляем
         if (change.type == DocumentChangeType.modified ||
             change.type == DocumentChangeType.added) {
           _globalProcessedOrders[orderId] = status;
@@ -138,7 +158,6 @@ class _MainScreenState extends State<MainScreen> {
           index: _currentIndex,
           children: [
             _buildTabNavigator(0, const CategoriesPage()),
-            // Вкладка корзины всё еще динамически подгружает нужный shopId
             _buildTabNavigator(1, ValueListenableBuilder<String?>(
               valueListenable: currentActiveShopId,
               builder: (context, activeShopId, _) {
@@ -170,7 +189,6 @@ class _MainScreenState extends State<MainScreen> {
               },
               items: const [
                 BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Главная'),
-                // Обычная иконка без красного круга и цифр
                 BottomNavigationBarItem(icon: Icon(Icons.shopping_basket), label: 'Корзина'),
                 BottomNavigationBarItem(icon: Icon(Icons.assignment_rounded), label: 'Заказы'),
                 BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Профиль'),
@@ -185,57 +203,62 @@ class _MainScreenState extends State<MainScreen> {
   void _showAuthRequired(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) =>
-          AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.deepOrange.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.lock_person_rounded, color: Colors.deepOrange, size: 40),
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.deepOrange.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.lock_person_rounded,
+                  color: Colors.deepOrange, size: 40),
+            ),
+            const SizedBox(height: 16),
+            const Text('Требуется вход',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const Text(
+          'Чтобы смотреть историю заказов и оформлять новые, нужно войти в аккаунт или зарегистрироваться.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 15, color: Colors.black87),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Отмена',
+                      style: TextStyle(color: Colors.grey, fontSize: 16)),
                 ),
-                const SizedBox(height: 16),
-                const Text('Требуется вход', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
-              ],
-            ),
-            content: const Text(
-              'Чтобы смотреть историю заказов и оформлять новые, нужно войти в аккаунт или зарегистрироваться.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 15, color: Colors.black87),
-            ),
-            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            actions: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Отмена', style: TextStyle(color: Colors.grey, fontSize: 16)),
-                    ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    setState(() => _currentIndex = 3);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepOrange,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        setState(() => _currentIndex = 3);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepOrange,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: const Text('Войти', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                ],
+                  child: const Text('Войти',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
               ),
             ],
           ),
+        ],
+      ),
     );
   }
 }

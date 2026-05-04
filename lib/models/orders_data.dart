@@ -22,13 +22,13 @@ class OrdersService {
           String title = "Обновление заказа";
           String message = "";
 
-          if (status == 'accepted') {
+          if (status == 'preparing') {
             message = "Ваш заказ принят! Начинаем готовить 👨‍🍳";
-          } else if (status == 'delivery') {
+          } else if (status == 'accepted') {
             message = "Заказ в пути! Курьер уже мчится к вам 🏎️";
           } else if (status == 'completed') {
             message = "Доставлено! Приятного аппетита 🍕";
-          } else if (status == 'cancelled') {
+          } else if (status == 'delivered') {
             title = "Заказ отменен";
             message = "К сожалению, ресторан отменил заказ 😔";
           }
@@ -41,14 +41,15 @@ class OrdersService {
     });
   }
 
-  // Добавление заказа — ДОБАВИЛ category
+  // Добавление заказа
   static Future<void> addOrder(
       String userId,
       List<CartItem> cart, {
         required String restaurantName,
         required String shopId,
-        required String category, // 🔹 НОВОЕ: Передаем категорию магазина (restaurant, product и т.д.)
-        String comment = '',
+        required String category,
+        String comment = '', // Это комментарий курьеру
+        String restaurantComment = '', // 🔹 НОВОЕ: Комментарий для заведения
         String paymentMethod = 'cash',
         double? lat,
         double? lng,
@@ -61,7 +62,7 @@ class OrdersService {
       'userId': userId,
       'shopId': shopId,
       'restaurantName': restaurantName,
-      'category': category, // 🔹 СОХРАНЯЕМ КАТЕГОРИЮ В БД
+      'category': category,
       'items': cart.map((item) => {
         'name': item.dish.name,
         'price': item.dish.price,
@@ -72,7 +73,8 @@ class OrdersService {
       }).toList(),
       'total': cart.fold<double>(0, (sum, item) => sum + item.dish.price * item.quantity),
       'paymentMethod': paymentMethod,
-      'comment': comment,
+      'comment': comment, // Сохраняется как прежде (для курьера)
+      'restaurantComment': restaurantComment, // 🔹 СОХРАНЯЕМ НОВЫЙ КОММЕНТАРИЙ
       'status': 'new',
       'createdAt': FieldValue.serverTimestamp(),
       'clientName': clientName,
@@ -81,6 +83,7 @@ class OrdersService {
       'clientLng': lng,
     };
 
+    // Сохраняем в коллекцию заказов пользователя
     await _firestore
         .collection('users')
         .doc(userId)

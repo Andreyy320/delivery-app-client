@@ -27,7 +27,8 @@ class CheckoutScreen extends StatefulWidget {
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
   LatLng? _deliveryLocation;
-  String _comment = '';
+  String _comment = ''; // Это для курьера (оставляем старое имя переменной)
+  String _restaurantComment = ''; // НОВОЕ: для заведения
   String _selectedPayment = 'online';
 
   late final ValueNotifier<List<CartItem>> cartNotifier;
@@ -72,7 +73,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (result != null) setState(() => _deliveryLocation = result);
   }
 
-  // --- НОВАЯ ЛОГИКА: СОХРАНЕНИЕ АДРЕСА В ИСТОРИЮ ---
   Future<void> _addToHistory(LatLng location) async {
     if (userId == null) return;
 
@@ -81,7 +81,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         .doc(userId)
         .collection('address_history');
 
-    // Проверяем, нет ли уже такой точки рядом, чтобы не дублировать
     final existing = await historyRef.get();
     bool exists = existing.docs.any((doc) {
       double lat = doc['lat'];
@@ -119,16 +118,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
       final String shopCategory = shopDoc.data()?['category'] ?? 'restaurant';
 
-      // Сохраняем адрес в историю перед созданием заказа
       await _addToHistory(_deliveryLocation!);
 
+      // В OrdersService.addOrder передаем два комментария
       await OrdersService.addOrder(
         userId!,
         cartNotifier.value,
         restaurantName: widget.restaurantName,
         shopId: widget.shopId,
         category: shopCategory,
-        comment: _comment,
+        comment: _comment, // Курьеру
+        restaurantComment: _restaurantComment, // Заведению (убедись, что метод addOrder это принимает)
         paymentMethod: _selectedPayment,
         lat: _deliveryLocation!.latitude,
         lng: _deliveryLocation!.longitude,
@@ -145,7 +145,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
-  // --- ВИДЖЕТ ИСТОРИИ АДРЕСОВ ---
   Widget _buildAddressHistory() {
     if (userId == null) return const SizedBox.shrink();
 
@@ -261,13 +260,40 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     ),
                   ),
 
-                  // ВСТАВЛЯЕМ СПИСОК ИСТОРИИ
                   _buildAddressHistory(),
 
                   const SizedBox(height: 24),
-                  const Text('Комментарий',
-                      style:
-                      TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  // --- ПОЛЕ ДЛЯ ЗАВЕДЕНИЯ ---
+                  const Text('Комментарий заведению',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 12),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                            color: Colors.black.withOpacity(0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4))
+                      ],
+                    ),
+                    child: TextField(
+                      maxLines: 2,
+                      onChanged: (value) => setState(() => _restaurantComment = value),
+                      decoration: const InputDecoration(
+                        hintText: 'Без лука, поострее, без соли...',
+                        hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.all(16),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+                  // --- ПОЛЕ ДЛЯ КУРЬЕРА ---
+                  const Text('Комментарий курьеру',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 12),
                   Container(
                     decoration: BoxDecoration(
@@ -291,10 +317,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       ),
                     ),
                   ),
+
                   const SizedBox(height: 24),
                   const Text('Оплата',
-                      style:
-                      TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 12),
                   GridView.builder(
                     shrinkWrap: true,
@@ -310,40 +336,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       final option = paymentOptions[index];
                       final selected = _selectedPayment == option['id'];
                       return GestureDetector(
-                        onTap: () => setState(() =>
-                        _selectedPayment = option['id'] as String),
+                        onTap: () => setState(() => _selectedPayment = option['id'] as String),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           decoration: BoxDecoration(
-                            color:
-                            selected ? Colors.deepOrange : Colors.white,
+                            color: selected ? Colors.deepOrange : Colors.white,
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: selected
-                                ? [
-                              BoxShadow(
-                                  color: Colors.deepOrange
-                                      .withOpacity(0.3),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 4))
-                            ]
+                                ? [BoxShadow(color: Colors.deepOrange.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]
                                 : [],
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(option['icon'] as IconData,
-                                  color:
-                                  selected ? Colors.white : Colors.grey,
-                                  size: 20),
+                              Icon(option['icon'] as IconData, color: selected ? Colors.white : Colors.grey, size: 20),
                               const SizedBox(width: 8),
                               Text(
                                 option['label'] as String,
-                                style: TextStyle(
-                                    color: selected
-                                        ? Colors.white
-                                        : Colors.black87,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13),
+                                style: TextStyle(color: selected ? Colors.white : Colors.black87, fontWeight: FontWeight.bold, fontSize: 13),
                               ),
                             ],
                           ),
@@ -361,11 +371,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               color: Colors.white,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
               boxShadow: [
-                BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 20,
-                    offset: const Offset(0, -5))
-              ],
+                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -5))],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -373,14 +379,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('К оплате:',
-                        style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey,
-                            fontWeight: FontWeight.w600)),
-                    Text('${total.toStringAsFixed(0)} Руб',
-                        style: const TextStyle(
-                            fontSize: 24, fontWeight: FontWeight.w900)),
+                    const Text('К оплате:', style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w600)),
+                    Text('${total.toStringAsFixed(0)} Руб', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -393,15 +393,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       backgroundColor: Colors.deepOrange,
                       foregroundColor: Colors.white,
                       elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                     ),
-                    child: const Text('ОФОРМИТЬ ЗАКАЗ',
-                        style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.1)),
+                    child: const Text('ОФОРМИТЬ ЗАКАЗ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
                   ),
                 ),
               ],
@@ -412,8 +406,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 }
-// Код OrderConfirmationScreen и SelectLocationScreen без изменений...
 
+// OrderConfirmationScreen и SelectLocationScreen без изменений...
 class OrderConfirmationScreen extends StatelessWidget {
   const OrderConfirmationScreen({super.key});
 
@@ -429,41 +423,25 @@ class OrderConfirmationScreen extends StatelessWidget {
             const Spacer(),
             Container(
               padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.check_circle_rounded,
-                  color: Colors.green, size: 100),
+              decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), shape: BoxShape.circle),
+              child: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 100),
             ),
             const SizedBox(height: 32),
-            const Text(
-              'Заказ оформлен!',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900),
-            ),
+            const Text('Заказ оформлен!', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
             const SizedBox(height: 16),
-            Text(
-              'Спасибо! Ваш заказ принят.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontSize: 16, color: Colors.grey[600], height: 1.5),
-            ),
+            Text('Спасибо! Ваш заказ принят.', textAlign: TextAlign.center, style: TextStyle(fontSize: 16, color: Colors.grey[600], height: 1.5)),
             const Spacer(),
             SizedBox(
               width: double.infinity,
               height: 60,
               child: ElevatedButton(
-                onPressed: () =>
-                    Navigator.of(context).popUntil((route) => route.isFirst),
+                onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.black87,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                 ),
-                child: const Text('ВЕРНУТЬСЯ В МЕНЮ',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                child: const Text('ВЕРНУТЬСЯ В МЕНЮ', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             ),
           ],
@@ -473,7 +451,6 @@ class OrderConfirmationScreen extends StatelessWidget {
   }
 }
 
-// SelectLocationScreen остается без изменений, как в вашем коде...
 class SelectLocationScreen extends StatefulWidget {
   const SelectLocationScreen({super.key});
 
@@ -490,17 +467,12 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text(
-          'Выбор адреса',
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 18),
-        ),
+        title: const Text('Выбор адреса', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 18)),
         centerTitle: true,
         backgroundColor: Colors.white.withOpacity(0.8),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
-        ),
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(bottom: Radius.circular(20))),
       ),
       body: Stack(
         children: [
@@ -523,18 +495,12 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                       point: selectedLatLng!,
                       width: 50,
                       height: 50,
-                      child: const Icon(
-                        Icons.location_on,
-                        color: Colors.deepOrange,
-                        size: 50,
-                        shadows: [Shadow(color: Colors.white, blurRadius: 10)],
-                      ),
+                      child: const Icon(Icons.location_on, color: Colors.deepOrange, size: 50, shadows: [Shadow(color: Colors.white, blurRadius: 10)]),
                     ),
                   ],
                 ),
             ],
           ),
-
           if (selectedLatLng == null)
             Positioned(
               top: MediaQuery.of(context).padding.top + 70,
@@ -542,24 +508,17 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
               right: 40,
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(30),
-                ),
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(30)),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: const [
                     Icon(Icons.touch_app_outlined, size: 18, color: Colors.deepOrange),
                     SizedBox(width: 10),
-                    Text(
-                      'Нажмите на карту',
-                      style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black87),
-                    ),
+                    Text('Нажмите на карту', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black87)),
                   ],
                 ),
               ),
             ),
-
           if (selectedLatLng != null)
             Positioned(
               bottom: 40,
@@ -569,9 +528,7 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                 height: 64,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(20),
-                  gradient: const LinearGradient(
-                    colors: [Colors.deepOrange, Color(0xFFFF7043)],
-                  ),
+                  gradient: const LinearGradient(colors: [Colors.deepOrange, Color(0xFFFF7043)]),
                 ),
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -580,15 +537,7 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                   ),
                   onPressed: () => Navigator.pop(context, selectedLatLng),
-                  child: const Text(
-                    'ПОДТВЕРДИТЬ АДРЕС',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
+                  child: const Text('ПОДТВЕРДИТЬ АДРЕС', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 1.5)),
                 ),
               ),
             ),
