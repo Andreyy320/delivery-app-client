@@ -107,7 +107,7 @@ class BusinessStopListScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            "$price Руб • $weight",
+                            "$price Руб • $weight г",
                             style: const TextStyle(
                                 color: Colors.blueGrey,
                                 fontSize: 13,
