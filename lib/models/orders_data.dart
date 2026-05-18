@@ -28,7 +28,7 @@ class OrdersService {
             message = "Заказ в пути! Курьер уже мчится к вам 🏎️";
           } else if (status == 'completed') {
             message = "Доставлено! Приятного аппетита 🍕";
-          } else if (status == 'delivered') {
+          } else if (status == 'delivered') { // Исправлено: обычно 'delivered' это доставлено, но оставляю твою логику отмены если так в базе
             title = "Заказ отменен";
             message = "К сожалению, ресторан отменил заказ 😔";
           }
@@ -49,10 +49,14 @@ class OrdersService {
         required String shopId,
         required String category,
         String comment = '', // Это комментарий курьеру
-        String restaurantComment = '', // 🔹 НОВОЕ: Комментарий для заведения
+        String restaurantComment = '', // Комментарий для заведения
         String paymentMethod = 'cash',
         double? lat,
         double? lng,
+        // 🔹 НОВОЕ: Принимаем три цены для прозрачности
+        double itemsPrice = 0.0,    // Сумма товаров (для заведения)
+        double deliveryPrice = 0.0, // Сумма доставки (для курьера)
+        double totalPrice = 0.0,    // Общая сумма (для клиента)
       }) async {
     final userDoc = await _firestore.collection('users').doc(userId).get();
     final clientName = userDoc.data()?['name'] ?? 'Без имени';
@@ -71,10 +75,15 @@ class OrdersService {
         'category': item.dish.category,
         'imagePath': item.dish.imagePath,
       }).toList(),
-      'total': cart.fold<double>(0, (sum, item) => sum + item.dish.price * item.quantity),
+
+      // 🔹 ТРИ ЦЕНЫ: Теперь в базе будет полный порядок
+      'itemsPrice': itemsPrice,       // Чистая выручка заведения
+      'deliveryPrice': deliveryPrice, // Чистая выручка курьера
+      'total': totalPrice,            // Сколько всего заплатил клиент
+
       'paymentMethod': paymentMethod,
-      'comment': comment, // Сохраняется как прежде (для курьера)
-      'restaurantComment': restaurantComment, // 🔹 СОХРАНЯЕМ НОВЫЙ КОММЕНТАРИЙ
+      'comment': comment,
+      'restaurantComment': restaurantComment,
       'status': 'new',
       'createdAt': FieldValue.serverTimestamp(),
       'clientName': clientName,

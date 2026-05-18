@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'dart:convert';
@@ -9,6 +10,9 @@ class ExpressOrderConfirmationScreen extends StatefulWidget {
   final LatLng dropoff;
   final Set<String> options;
   final double totalCost;
+  // Добавляем недостающие параметры:
+  final double distanceKm;
+  final int durationMin;
 
   const ExpressOrderConfirmationScreen({
     super.key,
@@ -16,6 +20,8 @@ class ExpressOrderConfirmationScreen extends StatefulWidget {
     required this.dropoff,
     required this.options,
     required this.totalCost,
+    required this.distanceKm,
+    required this.durationMin,
   });
 
   @override
@@ -25,11 +31,12 @@ class ExpressOrderConfirmationScreen extends StatefulWidget {
 class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmationScreen> {
   List<LatLng> routePoints = [];
   bool isLoading = true;
+  final MapController _mapController = MapController();
 
   final Map<String, int> optionPrices = {
     'receiver_pay': 0,
-    'fragile': 20,
-    'large': 30,
+    'fragile': 50,
+    'large': 100,
   };
 
   @override
@@ -54,6 +61,17 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
           routePoints = coords.map((c) => LatLng(c[1].toDouble(), c[0].toDouble())).toList();
           isLoading = false;
         });
+
+        if (routePoints.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _mapController.fitCamera(
+              CameraFit.bounds(
+                bounds: LatLngBounds.fromPoints(routePoints),
+                padding: const EdgeInsets.all(50),
+              ),
+            );
+          });
+        }
       }
     } catch (e) {
       debugPrint("Ошибка получения маршрута: $e");
@@ -69,16 +87,17 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
       appBar: AppBar(
-        title: const Text('Проверка заказа', style: TextStyle(fontWeight: FontWeight.w900)),
+        title: const Text('Проверка заказа', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.black)),
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
+        leading: const BackButton(color: Colors.black),
       ),
       body: Column(
         children: [
-          // КАРТА ОСТАЕТСЯ ФИКСИРОВАННОЙ СВЕРХУ
+          // КАРТА
           SizedBox(
-            height: MediaQuery.of(context).size.height * 0.3,
+            height: MediaQuery.of(context).size.height * 0.35,
             child: Container(
               margin: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -90,6 +109,7 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
                 child: Stack(
                   children: [
                     FlutterMap(
+                      mapController: _mapController,
                       options: MapOptions(
                         initialCenter: widget.pickup,
                         initialZoom: 14,
@@ -107,7 +127,6 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
                                 color: Colors.deepOrange,
                                 strokeWidth: 5,
                                 strokeCap: StrokeCap.round,
-                                strokeJoin: StrokeJoin.round,
                               ),
                             ],
                           ),
@@ -129,8 +148,8 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
                     ),
                     if (isLoading)
                       Container(
-                        color: Colors.white60,
-                        child: const Center(child: CircularProgressIndicator(color: Colors.deepOrange)),
+                        color: Colors.white70,
+                        child: const Center(child: CupertinoActivityIndicator(radius: 15)),
                       ),
                   ],
                 ),
@@ -138,7 +157,7 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
             ),
           ),
 
-          // ПРОКРУЧИВАЕМАЯ ЧАСТЬ (АДРЕСА + УСЛУГИ)
+          // ИНФОРМАЦИЯ
           Expanded(
             child: CustomScrollView(
               physics: const BouncingScrollPhysics(),
@@ -147,73 +166,95 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
-                      const Text('МАРШРУТ', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.black38)),
+                      const Text('ДЕТАЛИ ПУТИ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.black38, letterSpacing: 1.2)),
+                      const SizedBox(height: 12),
+                      _buildRouteInfoCard(),
+                      const SizedBox(height: 24),
+                      const Text('МАРШРУТ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.black38, letterSpacing: 1.2)),
                       const SizedBox(height: 12),
                       _buildAddressCard(),
                       const SizedBox(height: 24),
-                      const Text('УСЛУГИ', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.black38)),
+                      const Text('УСЛУГИ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.black38, letterSpacing: 1.2)),
                       const SizedBox(height: 12),
                     ]),
                   ),
                 ),
-                // Список услуг через SliverList, чтобы они были частью общей прокрутки
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   sliver: widget.options.isEmpty
                       ? const SliverToBoxAdapter(
                     child: Center(
                       child: Padding(
-                        padding: EdgeInsets.only(top: 20),
-                        child: Text('Дополнительных услуг нет', style: TextStyle(color: Colors.black38, fontWeight: FontWeight.w600)),
+                        padding: EdgeInsets.only(top: 10),
+                        child: Text('Стандартная экспресс-доставка', style: TextStyle(color: Colors.black38, fontWeight: FontWeight.w600)),
                       ),
                     ),
                   )
                       : SliverList(
                     delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                        final optId = widget.options.elementAt(index);
-                        return _buildOptionItem(optId);
-                      },
+                          (context, index) => _buildOptionItem(widget.options.elementAt(index)),
                       childCount: widget.options.length,
                     ),
                   ),
                 ),
-                const SliverToBoxAdapter(child: SizedBox(height: 20)), // Отступ снизу
+                const SliverToBoxAdapter(child: SizedBox(height: 20)),
               ],
             ),
           ),
-
           _buildBottomAction(context),
         ],
       ),
     );
   }
 
-  Widget _buildAddressCard() {
+  Widget _buildRouteInfoCard() {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
-      child: Column(
+      decoration: BoxDecoration(color: Colors.blue.withOpacity(0.05), borderRadius: BorderRadius.circular(24)),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildRow(Icons.circle, Colors.green, 'ОТКУДА', widget.pickup, true),
-          const SizedBox(height: 10),
-          _buildRow(Icons.location_on_rounded, Colors.deepOrange, 'КУДА', widget.dropoff, false),
+          _infoColumn('РАССТОЯНИЕ', '${widget.distanceKm.toStringAsFixed(1)} км'),
+          Container(width: 1, height: 30, color: Colors.blue.withOpacity(0.2)),
+          _infoColumn('В ПУТИ', '~${widget.durationMin} мин'),
         ],
       ),
     );
   }
 
-  Widget _buildRow(IconData icon, Color color, String label, LatLng pos, bool line) {
+  Widget _infoColumn(String label, String value) {
+    return Column(children: [
+      Text(label, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.blueAccent)),
+      const SizedBox(height: 4),
+      Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Colors.blue)),
+    ]);
+  }
+
+  Widget _buildAddressCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)]),
+      child: Column(
+        children: [
+          _buildAddressRow(Icons.circle, Colors.green, 'ОТКУДА', widget.pickup, true),
+          const SizedBox(height: 10),
+          _buildAddressRow(Icons.location_on_rounded, Colors.deepOrange, 'КУДА', widget.dropoff, false),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAddressRow(IconData icon, Color color, String label, LatLng pos, bool showLine) {
     return Row(
       children: [
         Column(children: [
-          Icon(icon, color: color, size: 14),
-          if (line) Container(width: 1, height: 20, color: Colors.grey[300], margin: const EdgeInsets.symmetric(vertical: 4)),
+          Icon(icon, color: color, size: 16),
+          if (showLine) Container(width: 2, height: 20, color: Colors.grey[100], margin: const EdgeInsets.symmetric(vertical: 4)),
         ]),
-        const SizedBox(width: 12),
+        const SizedBox(width: 15),
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.black38)),
-          Text('${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text('${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
         ]),
       ],
     );
@@ -227,11 +268,11 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
     switch (optId) {
       case 'receiver_pay':
         title = 'Оплатит получатель';
-        icon = Icons.payment_rounded;
+        icon = Icons.account_balance_wallet_rounded;
         break;
       case 'fragile':
         title = 'Хрупкий груз';
-        icon = Icons.auto_awesome_rounded;
+        icon = Icons.inventory_2_rounded;
         break;
       case 'large':
         title = 'Крупные габариты';
@@ -244,11 +285,7 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
       child: Row(
         children: [
           Container(
@@ -267,11 +304,7 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
   Widget _buildBottomAction(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 34),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: const BorderRadius.vertical(top: Radius.circular(30)), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20)]),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -279,16 +312,16 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Итого к оплате', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
-              Text('${widget.totalCost.toInt()} ₽', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900)),
+              Text('${widget.totalCost.toInt()} ₽', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
             ],
           ),
           const SizedBox(height: 20),
           SizedBox(
-            width: double.infinity, height: 60,
+            width: double.infinity, height: 65,
             child: ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('ЗАКАЗАТЬ КУРЬЕРА', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)), elevation: 0),
+              onPressed: isLoading ? null : () => Navigator.pop(context, true),
+              child: const Text('ПОДТВЕРДИТЬ ЗАКАЗ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
             ),
           ),
         ],

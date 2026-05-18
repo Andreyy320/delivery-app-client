@@ -29,7 +29,7 @@ android {
         applicationId = "com.example.untitled1"
 
         // Исправленные названия:
-        minSdk = 21
+        minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion // Было flutter.targetSdk (ошибка тут)
 
         versionCode = flutter.versionCode

@@ -94,6 +94,12 @@ class BusinessOrdersScreen extends StatelessWidget {
         ? DateFormat('HH:mm').format((data['createdAt'] as Timestamp).toDate())
         : "--:--";
 
+    // --- РАСЧЕТ ЦЕНЫ ТОЛЬКО ЗА ТОВАРЫ ---
+    double totalAll = (data['total'] ?? 0).toDouble();
+    double deliveryPrice = (data['deliveryPrice'] ?? 0).toDouble();
+    double productsOnlyPrice = totalAll - deliveryPrice;
+    if (productsOnlyPrice < 0) productsOnlyPrice = 0;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -120,7 +126,8 @@ class BusinessOrdersScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(data['clientName'] ?? "Клиент", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-                    Text("${data['total'] ?? 0} Руб", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+                    // ПОКАЗЫВАЕМ ТОЛЬКО СУММУ ТОВАРОВ
+                    Text("${productsOnlyPrice.toInt()} Руб", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
                   ],
                 ),
 

@@ -17,6 +17,8 @@ class GorodOrderConfirmationScreen extends StatefulWidget {
   final bool timeSelected;
   final DateTime? scheduledTime;
   final int totalPrice;
+  final int routePrice;
+  final int basePrice;
 
   const GorodOrderConfirmationScreen({
     super.key,
@@ -30,6 +32,8 @@ class GorodOrderConfirmationScreen extends StatefulWidget {
     required this.timeSelected,
     required this.scheduledTime,
     required this.totalPrice,
+    required this.routePrice,
+    required this.basePrice,
   });
 
   @override
@@ -40,7 +44,8 @@ class _GorodOrderConfirmationScreenState extends State<GorodOrderConfirmationScr
   final MapController _mapController = MapController();
   List<LatLng> routePoints = [];
   bool isLoadingRoute = true;
-  // Твой ключ OpenRouteService
+  bool isSubmitting = false;
+
   final String orsKey = '5b3ce3597851110001cf6248bf7b24ca801246a5913cae76ef354218';
 
   @override
@@ -50,6 +55,7 @@ class _GorodOrderConfirmationScreenState extends State<GorodOrderConfirmationScr
   }
 
   Future<void> _buildRoute() async {
+    if (!mounted) return;
     setState(() => isLoadingRoute = true);
 
     final start = LatLng(widget.pickup['lat']!, widget.pickup['lng']!);
@@ -58,28 +64,31 @@ class _GorodOrderConfirmationScreenState extends State<GorodOrderConfirmationScr
     bool success = await _fetchORS(start, end);
     if (!success) await _fetchOSRM(start, end);
 
-    if (mounted) {
+    if (mounted && routePoints.isNotEmpty) {
       setState(() => isLoadingRoute = false);
       _mapController.fitCamera(
         CameraFit.bounds(
-          bounds: LatLngBounds.fromPoints([start, end]),
+          bounds: LatLngBounds.fromPoints(routePoints),
           padding: const EdgeInsets.all(50),
         ),
       );
+    } else {
+      if (mounted) setState(() => isLoadingRoute = false);
     }
   }
 
   Future<bool> _fetchORS(LatLng start, LatLng end) async {
     final url = 'https://api.openrouteservice.org/v2/directions/driving-car?api_key=$orsKey&start=${start.longitude},${start.latitude}&end=${end.longitude},${end.latitude}';
     try {
-      final r = await http.get(
-        Uri.parse(url),
-        headers: {'User-Agent': 'GorodApp/1.0'},
-      ).timeout(const Duration(seconds: 8));
-
+      final r = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 8));
       if (r.statusCode == 200) {
-        final coords = json.decode(r.body)['features'][0]['geometry']['coordinates'] as List;
-        setState(() => routePoints = coords.map((c) => LatLng(c[1].toDouble(), c[0].toDouble())).toList());
+        final data = json.decode(r.body);
+        final coords = data['features'][0]['geometry']['coordinates'] as List;
+        if (mounted) {
+          setState(() {
+            routePoints = coords.map((c) => LatLng(c[1].toDouble(), c[0].toDouble())).toList();
+          });
+        }
         return true;
       }
       return false;
@@ -89,31 +98,33 @@ class _GorodOrderConfirmationScreenState extends State<GorodOrderConfirmationScr
   Future<void> _fetchOSRM(LatLng start, LatLng end) async {
     final url = 'https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson';
     try {
-      final r = await http.get(
-        Uri.parse(url),
-        headers: {'User-Agent': 'GorodApp/1.0'},
-      );
+      final r = await http.get(Uri.parse(url));
       if (r.statusCode == 200) {
-        final coords = json.decode(r.body)['routes'][0]['geometry']['coordinates'] as List;
-        setState(() => routePoints = coords.map((c) => LatLng(c[1].toDouble(), c[0].toDouble())).toList());
+        final data = json.decode(r.body);
+        final coords = data['routes'][0]['geometry']['coordinates'] as List;
+        if (mounted) {
+          setState(() {
+            routePoints = coords.map((c) => LatLng(c[1].toDouble(), c[0].toDouble())).toList();
+          });
+        }
       }
-    } catch (e) { debugPrint('$e'); }
+    } catch (e) { debugPrint('OSRM Error: $e'); }
   }
 
   Future<void> _saveOrderToFirestore() async {
+    setState(() => isSubmitting = true);
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception("Пользователь не авторизован");
 
-      // Получаем данные пользователя для формирования заказа
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       final userData = userDoc.data();
 
       final orderData = {
         'fromAddress': widget.fromAddress,
         'toAddress': widget.toAddress,
-        'pickup': widget.pickup,
-        'dropoff': widget.dropoff,
+        'pickup': GeoPoint(widget.pickup['lat']!, widget.pickup['lng']!),
+        'dropoff': GeoPoint(widget.dropoff['lat']!, widget.dropoff['lng']!),
         'bodySize': widget.bodySize,
         'loaders': widget.loaders,
         'escort': widget.escort,
@@ -122,7 +133,10 @@ class _GorodOrderConfirmationScreenState extends State<GorodOrderConfirmationScr
             ? Timestamp.fromDate(widget.scheduledTime!)
             : null,
         'totalPrice': widget.totalPrice,
+        'routePrice': widget.routePrice,
+        'basePrice': widget.basePrice,
         'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
         'status': 'new',
         'clientName': userData?['name'] ?? 'Без имени',
         'clientPhone': userData?['phone'] ?? '-',
@@ -130,54 +144,89 @@ class _GorodOrderConfirmationScreenState extends State<GorodOrderConfirmationScr
         'type': 'city',
       };
 
-      // Сохраняем ТОЛЬКО в подколлекцию пользователя
+      final orderRef = await FirebaseFirestore.instance.collection('orders').add(orderData);
+
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .collection('cityOrders')
-          .add(orderData);
+          .doc(orderRef.id)
+          .set(orderData);
 
-      print("Заказ успешно сохранен в профиль пользователя");
-    } catch (e) {
-      print("Ошибка при сохранении заказа: $e");
-      // Здесь можно выкинуть ошибку дальше, чтобы показать SnackBar в UI
-      rethrow;
+    } finally {
+      if (mounted) setState(() => isSubmitting = false);
     }
   }
 
-  // Функция для красивого отображения времени
   String _formatTime() {
-    if (!widget.timeSelected || widget.scheduledTime == null) {
-      return 'Как можно быстрее';
-    }
-
+    if (!widget.timeSelected || widget.scheduledTime == null) return 'Как можно быстрее';
     final st = widget.scheduledTime!;
     final String hour = st.hour.toString().padLeft(2, '0');
     final String minute = st.minute.toString().padLeft(2, '0');
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final scheduledDate = DateTime(st.year, st.month, st.day);
+    final diff = scheduledDate.difference(today).inDays;
 
-    String dayText = "${st.day.toString().padLeft(2, '0')}.${st.month.toString().padLeft(2, '0')}";
-
-    // Сравниваем только даты
-    DateTime onlyDateST = DateTime(st.year, st.month, st.day);
-    DateTime onlyDateNow = DateTime(now.year, now.month, now.day);
-    int diff = onlyDateST.difference(onlyDateNow).inDays;
-
+    String dayText;
     if (diff == 0) dayText = "Сегодня";
     else if (diff == 1) dayText = "Завтра";
     else if (diff == 2) dayText = "Послезавтра";
+    else dayText = "${st.day.toString().padLeft(2, '0')}.${st.month.toString().padLeft(2, '0')}";
 
     return '$dayText, $hour:$minute';
+  }
+
+  // ИСПРАВЛЕННЫЙ МЕТОД: Закрывает всё и уходит на главную
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 20),
+            const Icon(Icons.check_circle_rounded, color: Colors.green, size: 80),
+            const SizedBox(height: 20),
+            const Text('Готово!', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 10),
+            const Text('Заказ успешно создан.\nМы скоро свяжемся с вами.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 30),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                ),
+                onPressed: () {
+                  // 1. Закрываем само модальное окно
+                  Navigator.of(dialogContext).pop();
+                  // 2. Сбрасываем весь стек до самого первого экрана (Главной)
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                },
+                child: const Text('ОТЛИЧНО', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF8F9FB),
       appBar: AppBar(
         title: const Text('Проверка заказа', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900)),
         centerTitle: true,
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: Colors.black),
@@ -185,135 +234,112 @@ class _GorodOrderConfirmationScreenState extends State<GorodOrderConfirmationScr
         ),
       ),
       body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Карта
               Container(
-                height: 220,
+                height: 240,
                 width: double.infinity,
                 margin: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(25),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 15)],
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15)],
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(25),
+                  borderRadius: BorderRadius.circular(30),
                   child: Stack(
                     children: [
                       FlutterMap(
                         mapController: _mapController,
                         options: MapOptions(
                           initialCenter: LatLng(widget.pickup['lat']!, widget.pickup['lng']!),
-                          initialZoom: 13,
+                          initialZoom: 12,
                         ),
                         children: [
                           TileLayer(
                             urlTemplate: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
                             subdomains: const ['a', 'b', 'c', 'd'],
-                            userAgentPackageName: 'com.example.gorod_app',
                           ),
                           if (routePoints.isNotEmpty)
                             PolylineLayer(polylines: [
-                              Polyline(
-                                points: routePoints,
-                                color: Colors.deepOrange,
-                                strokeWidth: 5.0,
-                              )
+                              Polyline(points: routePoints, color: Colors.deepOrange, strokeWidth: 5.0),
                             ]),
                           MarkerLayer(markers: [
                             Marker(
                               point: LatLng(widget.pickup['lat']!, widget.pickup['lng']!),
-                              width: 30, height: 30,
-                              child: const Icon(Icons.radio_button_checked, color: Colors.green, size: 25),
+                              child: const Icon(Icons.radio_button_checked, color: Colors.green, size: 24),
                             ),
                             Marker(
                               point: LatLng(widget.dropoff['lat']!, widget.dropoff['lng']!),
-                              width: 30, height: 30,
-                              child: const Icon(Icons.location_on, color: Colors.red, size: 30),
+                              child: const Icon(Icons.location_on, color: Colors.deepOrange, size: 30),
                             ),
                           ]),
                         ],
                       ),
                       if (isLoadingRoute)
-                        Container(
-                          color: Colors.white.withOpacity(0.5),
-                          child: const Center(child: CircularProgressIndicator(color: Colors.deepOrange)),
-                        ),
+                        const Center(child: CircularProgressIndicator(color: Colors.deepOrange)),
                     ],
                   ),
                 ),
               ),
-
               const SizedBox(height: 20),
-
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: Colors.grey[100]!),
-                ),
+              _containerWrapper(
                 child: Column(
                   children: [
                     _buildRouteItem(Icons.radio_button_checked, Colors.green, 'ОТКУДА', widget.fromAddress),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 9),
-                      child: Align(alignment: Alignment.centerLeft, child: Container(width: 1.5, height: 20, color: Colors.grey[100])),
-                    ),
+                    _lineDivider(),
                     _buildRouteItem(Icons.location_on, Colors.deepOrange, 'КУДА', widget.toAddress),
                   ],
                 ),
               ),
-
-              const SizedBox(height: 25),
-              const Text('  Детали перевозки', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-              const SizedBox(height: 12),
-
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(24)),
+              const SizedBox(height: 20),
+              _containerWrapper(
                 child: Column(
                   children: [
-                    _buildDetailRow(Icons.local_shipping, 'Кузов', widget.bodySize),
+                    _buildDetailRow(Icons.local_shipping_outlined, 'Кузов', 'Тип ${widget.bodySize}'),
                     _divider(),
-                    _buildDetailRow(Icons.groups, 'Грузчики', widget.loaders == 0 ? "Нет" : '${widget.loaders} чел.'),
+                    _buildDetailRow(Icons.groups_outlined, 'Грузчики', widget.loaders == 0 ? "Не нужны" : '${widget.loaders} чел.'),
                     _divider(),
-                    _buildDetailRow(Icons.watch_later, 'Время', _formatTime()), // Используем новую функцию
+                    _buildDetailRow(Icons.access_time, 'Время', _formatTime()),
                   ],
                 ),
               ),
-
               const SizedBox(height: 30),
-
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Итоговая цена', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                  Text('${widget.totalPrice} ₽', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
+                  const Text('Итого', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 18)),
+                  Text('${widget.totalPrice} Руб', style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900)),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 25),
               SizedBox(
                 width: double.infinity,
                 height: 65,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.deepOrange,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
                     elevation: 10,
-                    shadowColor: Colors.deepOrange.withOpacity(0.4),
                   ),
-                  onPressed: () async {
+                  onPressed: isSubmitting ? null : () async {
                     try {
                       await _saveOrderToFirestore();
-                      Navigator.popUntil(context, (route) => route.isFirst);
+                      if (mounted) _showSuccessDialog();
                     } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red)
+                        );
+                      }
                     }
                   },
-                  child: const Text('ПОДТВЕРДИТЬ ЗАКАЗ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
+                  child: isSubmitting
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text('ПОДТВЕРДИТЬ ЗАКАЗ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
                 ),
               ),
               const SizedBox(height: 40),
@@ -324,19 +350,32 @@ class _GorodOrderConfirmationScreenState extends State<GorodOrderConfirmationScr
     );
   }
 
-  Widget _divider() => Divider(height: 20, color: Colors.grey[200]);
+  Widget _containerWrapper({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _lineDivider() => Container(margin: const EdgeInsets.only(left: 8), alignment: Alignment.centerLeft, child: Container(width: 2, height: 15, color: Colors.grey[100]));
+  Widget _divider() => Divider(height: 24, color: Colors.grey[100], thickness: 1.5);
 
   Widget _buildRouteItem(IconData icon, Color color, String label, String text) {
     return Row(
       children: [
-        Icon(icon, color: color, size: 18),
-        const SizedBox(width: 12),
+        Icon(icon, color: color, size: 22),
+        const SizedBox(width: 15),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: const TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold)),
-              Text(text, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w900)),
+              Text(text, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
             ],
           ),
         ),
@@ -347,9 +386,9 @@ class _GorodOrderConfirmationScreenState extends State<GorodOrderConfirmationScr
   Widget _buildDetailRow(IconData icon, String label, String value) {
     return Row(
       children: [
-        Icon(icon, size: 20, color: Colors.deepOrange),
-        const SizedBox(width: 12),
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+        Icon(icon, size: 22, color: Colors.grey[400]),
+        const SizedBox(width: 15),
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
         const Spacer(),
         Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
       ],

@@ -10,10 +10,11 @@ class Order {
   final String comment;
   final String paymentMethod;
   final double total;
+  final double deliveryPrice; // 🔹 НОВОЕ: Стоимость доставки
   final DateTime dateTime;
   final String status;
   final String? shopId;
-  final String? restaurantName; // 🔹 НОВОЕ: Название заведения
+  final String? restaurantName;
   final String type;
 
   final String? courierId;
@@ -34,12 +35,13 @@ class Order {
     required this.comment,
     required this.paymentMethod,
     required this.total,
+    required this.deliveryPrice, // 🔹 Добавляем в конструктор
     required this.dateTime,
     required this.status,
     required this.type,
     this.courierId,
     this.shopId,
-    this.restaurantName, // 🔹 Добавляем в конструктор
+    this.restaurantName,
     this.startedAt,
     this.readyAt,
     this.acceptedAt,
@@ -65,12 +67,13 @@ class Order {
     'comment': comment,
     'paymentMethod': paymentMethod,
     'total': total,
+    'deliveryPrice': deliveryPrice, // 🔹 Сохраняем стоимость доставки
     'dateTime': dateTime.toIso8601String(),
     'status': status,
     'type': type,
     'courierId': courierId,
     'shopId': shopId,
-    'restaurantName': restaurantName, // 🔹 Сохраняем название
+    'restaurantName': restaurantName,
     'startedAt': startedAt?.toIso8601String(),
     'readyAt': readyAt?.toIso8601String(),
     'acceptedAt': acceptedAt?.toIso8601String(),
@@ -97,12 +100,13 @@ class Order {
       comment: json['comment'],
       paymentMethod: json['paymentMethod'],
       total: (json['total'] as num).toDouble(),
+      deliveryPrice: (json['deliveryPrice'] as num? ?? 0.0).toDouble(), // 🔹 Читаем цену доставки
       dateTime: DateTime.parse(json['dateTime']),
       status: json['status'] ?? 'preparing',
       type: json['category'] ?? 'restaurant',
       courierId: json['courierId'],
       shopId: json['shopId'],
-      restaurantName: json['restaurantName'], // 🔹 Читаем название
+      restaurantName: json['restaurantName'],
       startedAt: json['startedAt'] != null ? DateTime.parse(json['startedAt']) : null,
       readyAt: json['readyAt'] != null ? DateTime.parse(json['readyAt']) : null,
       acceptedAt: json['acceptedAt'] != null ? DateTime.parse(json['acceptedAt']) : null,
@@ -143,12 +147,13 @@ class Order {
       comment: data['comment'] ?? '',
       paymentMethod: data['paymentMethod'] ?? 'online',
       total: (data['total'] as num).toDouble(),
+      deliveryPrice: (data['deliveryPrice'] as num? ?? 0.0).toDouble(), // 🔹 Читаем цену доставки из Firestore
       dateTime: date,
       status: data['status'] ?? 'preparing',
       type: data['category'] ?? 'restaurant',
       courierId: data['courierId'],
       shopId: data['shopId'],
-      restaurantName: data['restaurantName'], // 🔹 Читаем название из Firestore
+      restaurantName: data['restaurantName'],
       readyAt: _parseTimestamp('readyAt'),
       startedAt: _parseTimestamp('startedAt'),
       acceptedAt: _parseTimestamp('acceptedAt'),
