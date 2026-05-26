@@ -281,9 +281,9 @@ class _CityCargoDetailsScreenState extends State<CityCargoDetailsScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (_rawDistanceKm > 0) ...[
-            _priceRow('Тариф + услуги', '$base ₽'),
+            _priceRow('Тариф + услуги', '$base Руб'),
             const SizedBox(height: 6),
-            _priceRow('Маршрут (${_rawDistanceKm.toStringAsFixed(1)} км)', '$route ₽'),
+            _priceRow('Маршрут (${_rawDistanceKm.toStringAsFixed(1)} км)', '$route Руб'),
             const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider()),
           ],
           Row(

@@ -303,9 +303,9 @@ class _MejCityCargoDetailsScreenState extends State<MejCityCargoDetailsScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (_rawDistanceKm > 0) ...[
-            _priceRow('База + Доп. услуги', '$base ₽'),
+            _priceRow('База + Доп. услуги', '$base Руб'),
             const SizedBox(height: 6),
-            _priceRow('Дорога (${_rawDistanceKm.toStringAsFixed(1)} км)', '$route ₽'),
+            _priceRow('Дорога (${_rawDistanceKm.toStringAsFixed(1)} км)', '$route Руб'),
             const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider()),
           ],
           Row(
@@ -315,7 +315,7 @@ class _MejCityCargoDetailsScreenState extends State<MejCityCargoDetailsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('К ОПЛАТЕ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.2)),
-                  Text('$total ₽', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.black)),
+                  Text('$total Руб', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.black)),
                 ],
               ),
               ElevatedButton(

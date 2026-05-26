@@ -295,7 +295,7 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
           ),
           const SizedBox(width: 14),
           Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15))),
-          Text('+$price ₽', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.deepOrange)),
+          Text('+$price Руб', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.deepOrange)),
         ],
       ),
     );
@@ -312,7 +312,7 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Итого к оплате', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
-              Text('${widget.totalCost.toInt()} ₽', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
+              Text('${widget.totalCost.toInt()} Руб', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
             ],
           ),
           const SizedBox(height: 20),

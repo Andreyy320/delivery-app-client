@@ -319,7 +319,7 @@ class DishCardWithStatus extends StatelessWidget {
                                 color: Colors.white.withOpacity(0.9),
                                 borderRadius: BorderRadius.circular(10)
                             ),
-                            child: Text("${dish.price.toInt()} ₽",
+                            child: Text("${dish.price.toInt()} Руб",
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                           ),
                         )

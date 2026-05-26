@@ -226,10 +226,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _menuItem(Icons.storefront_rounded, 'Стать партнером', () {
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const BusinessRegistrationScreen()));
                     }),
-                    // -----------------------
-                    _menuItem(Icons.help_outline_rounded, 'О приложении', () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutAppScreen()));
-                    }),
                   ]),
                 ],
               ),

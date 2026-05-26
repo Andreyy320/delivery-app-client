@@ -271,7 +271,7 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
           Icon(isSelected ? Icons.check_circle_rounded : Icons.add_circle_outline, color: isSelected ? Colors.deepOrange : Colors.grey[400]),
           const SizedBox(width: 14),
           Expanded(child: Text(optionTitles[optId]!, style: const TextStyle(fontWeight: FontWeight.w700))),
-          Text('+${optionPrices[optId]} ₽', style: const TextStyle(fontWeight: FontWeight.w900)),
+          Text('+${optionPrices[optId]} Руб', style: const TextStyle(fontWeight: FontWeight.w900)),
         ]),
       ),
     );
@@ -288,7 +288,7 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
         children: [
           Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
             const Text('ИТОГО К ОПЛАТЕ', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.grey)),
-            Text('${total.toInt()} ₽', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900)),
+            Text('${total.toInt()} Руб', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900)),
           ]),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, padding: const EdgeInsets.symmetric(horizontal: 35, vertical: 20), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), elevation: canOrder ? 5 : 0),
