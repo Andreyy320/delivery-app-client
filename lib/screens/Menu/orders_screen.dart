@@ -182,7 +182,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   // --- ИСПРАВЛЕННАЯ КАРТОЧКА ЭКСПРЕСС КУРЬЕРА ---
   Widget _buildExpressCard(DeliveryOrder order) {
-    // Координаты для отображения
     String fromCoord = "${order.pickup.latitude.toStringAsFixed(6)}, ${order.pickup.longitude.toStringAsFixed(6)}";
     String toCoord = "${order.dropoff.latitude.toStringAsFixed(6)}, ${order.dropoff.longitude.toStringAsFixed(6)}";
 
@@ -195,7 +194,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Маршрут
           _routeRow(Icons.circle, Colors.deepPurple, "Откуда: $fromCoord"),
           const Padding(
             padding: EdgeInsets.only(left: 5),
@@ -205,7 +203,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
           const SizedBox(height: 12),
 
-          // Дополнительные услуги (Options)
           if (order.options.isNotEmpty)
             Wrap(
               spacing: 6,
@@ -290,23 +287,67 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
+  // --- ИСПРАВЛЕННАЯ СТИЛЬНАЯ БАЗОВАЯ КАРТОЧКА С ДАТОЙ ПОД НАЗВАНИЕМ ---
   Widget _baseCard({required Color color, required String title, required DateTime dateTime, required String path, required String id, required Widget child}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 2))]),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 2))]
+      ),
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
+            padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start, // Чтобы крестик выравнивался аккуратно по верхней линии
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(children: [Container(padding: const EdgeInsets.all(5), decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle), child: Icon(Icons.local_shipping_rounded, color: color, size: 16)), const SizedBox(width: 8), Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14))]),
-                Row(children: [Text(DateFormat('dd.MM HH:mm').format(dateTime.toLocal()), style: const TextStyle(color: Colors.grey, fontSize: 11)), IconButton(onPressed: () => _deleteOrder(path, id), icon: const Icon(Icons.close, size: 16, color: Colors.black26))]),
+                // Блок с иконкой, названием и датой снизу
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+                          child: Icon(Icons.local_shipping_rounded, color: color, size: 16)
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Color(0xFF1E293B)),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                                DateFormat('dd.MM.yyyy  •  HH:mm').format(dateTime.toLocal()),
+                                style: const TextStyle(color: Colors.black38, fontSize: 11, fontWeight: FontWeight.w500)
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Кнопка удаления справа вверху
+                IconButton(
+                  onPressed: () => _deleteOrder(path, id),
+                  icon: const Icon(Icons.close, size: 16, color: Colors.black26),
+                  splashRadius: 20,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
               ],
             ),
           ),
-          Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 14), child: child),
+          Padding(padding: const EdgeInsets.fromLTRB(16, 4, 16, 14), child: child),
         ],
       ),
     );
