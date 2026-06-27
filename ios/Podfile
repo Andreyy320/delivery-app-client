@@ -1,0 +1,18 @@
+# Указываем версию iOS, под которую собираем приложение
+platform :ios, '13.0'
+
+# Стандартный скрипт Flutter, который сам подтянет все плагины из pubspec.yaml
+import '../.flutter-plugins-dependencies'
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  flutter_install_all_ios_pods File.dirname(File.expand_path(__FILE__))
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_managed_attributes(target)
+  end
+end
