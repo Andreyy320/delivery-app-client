@@ -1,17 +1,12 @@
-# Устанавливаем глобальную платформу
 platform :ios, '13.0'
 
-# Это стандартный и самый надежный способ подключения хелпера во Flutter
-# Он берет пути относительно папки ios, без завязки на скрытые файлы в корне
+# Гитхаб сам знает, где лежит Flutter, поэтому используем стандартный подгрузчик инструментов
 config = use_native_modules! if respond_to?(:use_native_modules!)
-
-require_relative '../.flutter-plugins-dependencies' if File.exist?('../.flutter-plugins-dependencies')
 
 target 'Runner' do
   use_frameworks! :linkage => :static
   use_modular_headers!
 
-  # Вот эта строчка магически говорит Flutter автоматически прописать ВСЕ твои плагины в Xcode во время сборки
   flutter_install_all_ios_pods File.dirname(File.expand_path(__FILE__))
 end
 
