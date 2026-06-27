@@ -37,17 +37,20 @@ jobs:
         with:
           channel: 'stable'
 
-      # ФИКС: Увеличиваем буферы Git и включаем быструю загрузку, чтобы клонирование Firebase не обрывалось
-      - name: Optimize Git Configuration
+      # Очищаем кэш и принудительно обновляем CDN-репозиторий без клонирования гита
+      - name: Setup CocoaPods Repo
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global https.postBuffer 524288000
-          git config --global core.compression 0
+          pod repo remove trunk || true
+          pod repo add-cdn trunk https://cdn.cocoapods.org/
 
       - name: Build iOS
         run: |
           flutter pub get
-          flutter build ios --release --no-codesign -t lib/main.dart
+          # Флаг --no-pub ускоряет процесс, так как pub get мы уже сделали
+          flutter build ios --release --no-codesign --no-pub -t lib/main.dart
+        env:
+          # Заставляем CocoaPods качать строго последовательно, без разрыва соединений
+          COCOAPODS_PARALLEL_FETCH_SIZE: 1
 
       - name: Upload iOS Build
         uses: actions/upload-artifact@v4

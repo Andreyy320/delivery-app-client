@@ -1,6 +1,3 @@
-# Жестко прописываем один официальный быстрый источник версий в самый верх файла
-source 'https://github.com/CocoaPods/Specs.git'
-
 platform :ios, '13.0'
 
 flutter_root = ENV['FLUTTER_ROOT'] || '..'
