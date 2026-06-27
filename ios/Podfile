@@ -1,3 +1,6 @@
+# Указываем использовать подготовленный нами репозиторий вместо CDN
+source 'https://github.com/CocoaPods/Specs.git'
+
 platform :ios, '13.0'
 
 flutter_root = ENV['FLUTTER_ROOT'] || '..'
@@ -15,7 +18,7 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_managed_attributes(target)
-
+    
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
     end

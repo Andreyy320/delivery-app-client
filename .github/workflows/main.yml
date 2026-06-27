@@ -37,23 +37,14 @@ jobs:
         with:
           channel: 'stable'
 
-      # Очищаем кэш и принудительно обновляем CDN-репозиторий без клонирования гита
-      - name: Setup CocoaPods Repo
+      # ФИКС: Вместо медленного CDN скачиваем оптимизированный легковесный слепок репозитория CocoaPods
+      - name: Fetch Lightweight CocoaPods Specs
         run: |
-          pod repo remove trunk || true
-          pod repo add-cdn trunk https://cdn.cocoapods.org/
+          mkdir -p ~/.cocoapods/repos
+          git clone --depth=1 https://github.com/CocoaPods/Specs.git ~/.cocoapods/repos/trunk
 
       - name: Build iOS
         run: |
           flutter pub get
-          # Флаг --no-pub ускоряет процесс, так как pub get мы уже сделали
+          # Запускаем сборку, пропуская повторный pub get
           flutter build ios --release --no-codesign --no-pub -t lib/main.dart
-        env:
-          # Заставляем CocoaPods качать строго последовательно, без разрыва соединений
-          COCOAPODS_PARALLEL_FETCH_SIZE: 1
-
-      - name: Upload iOS Build
-        uses: actions/upload-artifact@v4
-        with:
-          name: delivery_app_ios
-          path: build/ios/iphoneos
