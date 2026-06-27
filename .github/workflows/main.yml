@@ -37,6 +37,7 @@ jobs:
         with:
           channel: 'stable'
 
+      # Оставляем кэш подов, он работает отлично
       - name: Cache Pods
         uses: actions/cache@v4
         with:
@@ -48,14 +49,15 @@ jobs:
       - name: Build iOS Dependencies
         run: |
           flutter pub get
-          # Заходим напрямую в iOS и ставим поды локально без выкачивания всего репозитория Specs
           cd ios
           pod install --repo-update
           cd ..
 
+      # ФИКС: Сбрасываем старый кэш компилятора и собираем начисто без легаси флагов
       - name: Build iOS App
         run: |
-          # Собираем архив приложения, используя уже готовые локальные зависимости
+          flutter clean
+          flutter pub get
           flutter build ios --release --no-codesign --no-pub -t lib/main.dart
 
       - name: Upload iOS Build
