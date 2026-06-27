@@ -3,7 +3,6 @@ platform :ios, '13.0'
 flutter_root = ENV['FLUTTER_ROOT'] || '..'
 require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
 
-# Отключаем использование внешних тяжелых источников, берем всё из локального pub кэша Flutter
 install! 'cocoapods', :deterministic_uuids => false
 
 target 'Runner' do
@@ -15,7 +14,7 @@ end
 
 post_install do |installer|
   installer.pods_project.targets.each do |target|
-    flutter_additional_ios_managed_attributes(target)
+    # Убрали падучий метод flutter_additional_ios_managed_attributes
     
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
