@@ -37,14 +37,29 @@ jobs:
         with:
           channel: 'stable'
 
-      # ФИКС: Вместо медленного CDN скачиваем оптимизированный легковесный слепок репозитория CocoaPods
-      - name: Fetch Lightweight CocoaPods Specs
-        run: |
-          mkdir -p ~/.cocoapods/repos
-          git clone --depth=1 https://github.com/CocoaPods/Specs.git ~/.cocoapods/repos/trunk
+      - name: Cache Pods
+        uses: actions/cache@v4
+        with:
+          path: ios/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('**/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
 
-      - name: Build iOS
+      - name: Build iOS Dependencies
         run: |
           flutter pub get
-          # Запускаем сборку, пропуская повторный pub get
+          # Заходим напрямую в iOS и ставим поды локально без выкачивания всего репозитория Specs
+          cd ios
+          pod install --repo-update
+          cd ..
+
+      - name: Build iOS App
+        run: |
+          # Собираем архив приложения, используя уже готовые локальные зависимости
           flutter build ios --release --no-codesign --no-pub -t lib/main.dart
+
+      - name: Upload iOS Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: delivery_app_ios
+          path: build/ios/iphoneos
