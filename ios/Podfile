@@ -14,10 +14,16 @@ end
 
 post_install do |installer|
   installer.pods_project.targets.each do |target|
-    # Убрали падучий метод flutter_additional_ios_managed_attributes
-    
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+
+      # ФИКС: Вырезаем легаси-флаг -G из флагов компилятора для каждого пода
+      if config.build_settings['OTHER_CFLAGS']
+        config.build_settings['OTHER_CFLAGS'].delete('-G')
+      end
+      if config.build_settings['OTHER_CPLUSPLUSFLAGS']
+        config.build_settings['OTHER_CPLUSPLUSFLAGS'].delete('-G')
+      end
     end
   end
 end
