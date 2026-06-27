@@ -1,7 +1,7 @@
 platform :ios, '13.0'
 
-# Исправлено: во Flutter используется require_relative для подключения скриптов
-require_relative '../.flutter-plugins-dependencies'
+# Изменили строку: теперь подтягиваем официальный встроенный скрипт Flutter
+require File.expand_path(File.join('..', '..', 'flutter', 'ephemeral', '.ios', 'Flutter', 'podhelper.rb'), __FILE__)
 
 target 'Runner' do
   use_frameworks!
@@ -14,7 +14,6 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_managed_attributes(target)
 
-    # Это важный фикс специально для Firebase-плагинов, чтобы они нормально компилировались
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
     end
