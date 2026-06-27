@@ -3,7 +3,6 @@ name: Build App
 on: [push, workflow_dispatch]
 
 jobs:
-  # Твой рабочий джоб для Андроида (оставили как есть, ничего не меняли)
   build_android:
     runs-on: ubuntu-latest
     steps:
@@ -23,13 +22,12 @@ jobs:
           name: delivery_app_android
           path: build/app/outputs/flutter-apk/app-release.apk
 
-  # Новый независимый джоб для Айфона (запустится параллельно на Маке)
   build_ios:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Java (нужно для стабильности инструментов)
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
@@ -39,10 +37,16 @@ jobs:
         with:
           channel: 'stable'
 
+      # ФИКС: Увеличиваем буферы Git и включаем быструю загрузку, чтобы клонирование Firebase не обрывалось
+      - name: Optimize Git Configuration
+        run: |
+          git config --global http.postBuffer 524288000
+          git config --global https.postBuffer 524288000
+          git config --global core.compression 0
+
       - name: Build iOS
         run: |
           flutter pub get
-          # Собираем iOS без подписи сертификатами, строго твой главный main.dart
           flutter build ios --release --no-codesign -t lib/main.dart
 
       - name: Upload iOS Build
