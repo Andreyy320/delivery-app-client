@@ -1,18 +1,17 @@
-# Задаем версию iOS
+# Жестко прописываем один официальный быстрый источник версий в самый верх файла
+source 'https://github.com/CocoaPods/Specs.git'
+
 platform :ios, '13.0'
 
-# Находим путь к Flutter SDK на сервере GitHub
 flutter_root = ENV['FLUTTER_ROOT'] || '..'
 require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
 
-# Подключаем нативные модули
 config = use_native_modules! if respond_to?(:use_native_modules!)
 
 target 'Runner' do
   use_frameworks! :linkage => :static
   use_modular_headers!
 
-  # Теперь этот метод сработает, так как мы сделали require правильного файла выше
   flutter_install_all_ios_pods File.dirname(File.expand_path(__FILE__))
 end
 
