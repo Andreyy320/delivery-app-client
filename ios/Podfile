@@ -1,8 +1,7 @@
-# Указываем версию iOS, под которую собираем приложение
 platform :ios, '13.0'
 
-# Стандартный скрипт Flutter, который сам подтянет все плагины из pubspec.yaml
-import '../.flutter-plugins-dependencies'
+# Исправлено: во Flutter используется require_relative для подключения скриптов
+require_relative '../.flutter-plugins-dependencies'
 
 target 'Runner' do
   use_frameworks!
@@ -14,5 +13,10 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_managed_attributes(target)
+
+    # Это важный фикс специально для Firebase-плагинов, чтобы они нормально компилировались
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+    end
   end
 end
