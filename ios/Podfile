@@ -1,7 +1,8 @@
 platform :ios, '13.0'
 
-# Изменили строку: теперь подтягиваем официальный встроенный скрипт Flutter
-require File.expand_path(File.join('..', '..', 'flutter', 'ephemeral', '.ios', 'Flutter', 'podhelper.rb'), __FILE__)
+# Берем путь напрямую из системной переменной Flutter на сервере Codemagic
+flutter_root = ENV['FLUTTER_ROOT'] || '..'
+require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
 
 target 'Runner' do
   use_frameworks!
