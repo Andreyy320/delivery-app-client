@@ -1,8 +1,10 @@
-name: Build_Android_APK
+name: Build App
+
 on: [push, workflow_dispatch]
 
 jobs:
-  build:
+  # Твой рабочий джоб для Андроида (оставили как есть, ничего не меняли)
+  build_android:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -13,7 +15,6 @@ jobs:
       - name: Build APK
         run: |
           flutter pub get
-          # Собираем универсальный APK (fat apk), который пойдет на любой телефон
           flutter build apk --release
 
       - name: Upload APK
@@ -21,3 +22,31 @@ jobs:
         with:
           name: delivery_app_android
           path: build/app/outputs/flutter-apk/app-release.apk
+
+  # Новый независимый джоб для Айфона (запустится параллельно на Маке)
+  build_ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java (нужно для стабильности инструментов)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Build iOS
+        run: |
+          flutter pub get
+          # Собираем iOS без подписи сертификатами, строго твой главный main.dart
+          flutter build ios --release --no-codesign -t lib/main.dart
+
+      - name: Upload iOS Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: delivery_app_ios
+          path: build/ios/iphoneos
