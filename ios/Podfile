@@ -1,30 +1,37 @@
 platform :ios, '14.0'
 
-flutter_root = ENV['FLUTTER_ROOT'] || '..'
-require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-install! 'cocoapods', :deterministic_uuids => false
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  raise "#{generated_xcode_build_settings_path} must exist" unless File.exist?(generated_xcode_build_settings_path)
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found"
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+flutter_ios_podfile_setup
 
 target 'Runner' do
   use_frameworks! :linkage => :static
   use_modular_headers!
 
-  flutter_install_all_ios_pods File.dirname(File.expand_path(__FILE__))
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 end
 
 post_install do |installer|
   installer.pods_project.targets.each do |target|
-    flutter_additional_ios_managed_attributes(target) if respond_to?(:flutter_additional_ios_managed_attributes)
-
-    target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
-
-      # ЖЕСТКИЙ ФИКС: Принудительно прописываем пути к заголовочным файлам Flutter для всех плагинов
-      config.build_settings['HEADER_SEARCH_PATHS'] = '$(inherited) "$(SRCROOT)/Flutter" "$(SRCROOT)/Pods/Headers/Public" "$(SRCROOT)/Pods/Headers/Public/Flutter"'
-      config.build_settings['FRAMEWORK_SEARCH_PATHS'] = '$(inherited) "$(SRCROOT)/Flutter"'
-
-      # Разрешаем сборку на ARM64 без валидации кода (для no-codesign на CI)
-      config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'
-    end
+    flutter_additional_ios_build_settings(target)
   end
 end
