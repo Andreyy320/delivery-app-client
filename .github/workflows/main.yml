@@ -37,7 +37,6 @@ jobs:
         with:
           channel: 'stable'
 
-      # Оставляем кэш подов, он работает отлично
       - name: Cache Pods
         uses: actions/cache@v4
         with:
@@ -53,9 +52,9 @@ jobs:
           pod install --repo-update
           cd ..
 
-      # ФИКС: Сбрасываем старый кэш компилятора и собираем начисто без легаси флагов
       - name: Build iOS App
         run: |
+          # Запускаем чистую сборку под новую версию iOS
           flutter clean
           flutter pub get
           flutter build ios --release --no-codesign --no-pub -t lib/main.dart
