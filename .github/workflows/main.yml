@@ -54,7 +54,6 @@ jobs:
 
       - name: Build iOS App
         run: |
-          # Запускаем чистую сборку под новую версию iOS
           flutter clean
           flutter pub get
           flutter build ios --release --no-codesign --no-pub -t lib/main.dart
