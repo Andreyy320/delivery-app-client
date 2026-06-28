@@ -36,10 +36,10 @@ jobs:
         run: |
           flutter pub get
 
-      # ФИКС: Генерируем конфигурационные файлы Flutter ДО запуска pod install
+      # ФИКС: Добавляем флаг --simulator, чтобы обойти проверку сертификатов Apple
       - name: Pre-build iOS configuration
         run: |
-          flutter build ios --config-only
+          flutter build ios --config-only --simulator
 
       - name: Install pods
         run: |
@@ -50,7 +50,6 @@ jobs:
 
       - name: Build iOS
         run: |
-          # Собираем без pub get, используя уже сгенерированные конфиги
           flutter build ios --release --no-codesign --no-pub
 
       - name: Upload iOS Build
