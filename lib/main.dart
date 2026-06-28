@@ -6,24 +6,30 @@ import 'firebase_options.dart';
 import 'screens/main_screen.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'dart:io';
-import 'package:connectivity_plus/connectivity_plus.dart'; // Добавлено для работы проверки интернета
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 void main() async {
-
-  // 🔹 ДОБАВЬ ЭТУ СТРОЧКУ ПЕРВОЙ
+  WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
 
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  // 🔹 Безопасная инициализация Firebase
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
 
-  // ДОБАВЬ ЭТИ СТРОКИ:
-  FirebaseMessaging messaging = FirebaseMessaging.instance;
-  NotificationSettings settings = await messaging.requestPermission(
-    alert: true,
-    badge: true,
-    sound: true,
-  );
-  print('Статус разрешения: ${settings.authorizationStatus}');
+    // Инициализация уведомлений только если Firebase взлетел
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+    await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+  } catch (e) {
+    // ВАЖНО: Если тут ошибка, ты увидишь её при дебаге.
+    // Приложение НЕ зависнет на белом экране, а пойдет дальше.
+    debugPrint('FIREBASE INIT ERROR: $e');
+  }
 
   runApp(const MyApp());
 }
@@ -31,9 +37,6 @@ void main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // 🛠️ ТЕСТОВЫЙ ТУМБЛЕР ДЛЯ ЭМУЛЯТОРА:
-  // Поставь true — чтобы ПРИНУДИТЕЛЬНО увидеть экран "Нет интернета"
-  // Поставь false — для обычной работы приложения (реальный режим сети)
   static const bool testOfflineMode = false;
 
   @override
@@ -43,34 +46,26 @@ class MyApp extends StatelessWidget {
       title: 'Delivery App',
       theme: ThemeData(
         primarySwatch: Colors.deepOrange,
-        useMaterial3: true, // Для более современного вида (по желанию)
+        useMaterial3: true,
       ),
-      // Исправленный глобальный перехватчик сети поверх любого экрана приложения
       builder: (context, child) {
         return StreamBuilder<List<ConnectivityResult>>(
           stream: Connectivity().onConnectivityChanged,
           builder: (context, snapshot) {
-            // ДИАГНОСТИЧЕСКИЙ ПРИНТ: покажет статус сети в консоли Android Studio
-            print("=== СТАТУС СЕТИ В ПРИЛОЖЕНИИ: ${snapshot.data} ===");
-
-            // 1. Если стрим только запускается и ещё не получил данные от системы
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return child ?? const SizedBox.shrink(); // Просто показываем контент, не блокируя
+              return child ?? const SizedBox.shrink();
             }
 
-            // Проверяем, включен ли искусственный офлайн для тестов на эмуляторе
             final connectivity = testOfflineMode
                 ? <ConnectivityResult>[ConnectivityResult.none]
                 : snapshot.data;
 
-            // 2. Если данные пришли, но список пуст или содержит статус отсутствия сети (.none)
             if (connectivity == null ||
                 connectivity.isEmpty ||
                 connectivity.contains(ConnectivityResult.none)) {
               return const OfflineScreen();
             }
 
-            // 3. Если интернет активен (Wi-Fi, мобильные данные или другие типы подключения)
             return child!;
           },
         );
