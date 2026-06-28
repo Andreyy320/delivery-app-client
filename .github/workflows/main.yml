@@ -23,42 +23,29 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
 
   build_ios:
-    runs-on: macos-latest
+    runs-on: macos-14
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-
       - uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: stable
 
-      - name: Cache Pods
-        uses: actions/cache@v4
-        with:
-          path: ios/Pods
-          key: ${{ runner.os }}-pods-${{ hashFiles('**/Podfile.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pods-
-
-      - name: Build iOS Dependencies
+      - name: Install dependencies
         run: |
           flutter pub get
+
+      - name: Install pods
+        run: |
           cd ios
-          # Очищаем старые нативные бинарники из кэша CocoaPods, чтобы флаг -G не вылез из старых логов
-          pod cache clean --all
+          pod deintegrate
           pod install --repo-update
           cd ..
 
-      - name: Build iOS App
+      - name: Build iOS
         run: |
-          flutter clean
-          flutter pub get
-          flutter build ios --release --no-codesign --no-pub -t lib/main.dart
+          flutter build ios --release --no-codesign
 
       - name: Upload iOS Build
         uses: actions/upload-artifact@v4
