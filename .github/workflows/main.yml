@@ -36,10 +36,15 @@ jobs:
         run: |
           flutter pub get
 
-      # ФИКС: Добавляем флаг --simulator, чтобы обойти проверку сертификатов Apple
-      - name: Pre-build iOS configuration
+      # ФИКС: Жестко связываем нативный фреймворк Flutter, чтобы плагины его нашли
+      - name: Force Link Flutter Framework
         run: |
-          flutter build ios --config-only --simulator
+          cd ios
+          flutter precache --ios
+          mkdir -p Flutter
+          # Копируем метаданные сборки во внутреннюю папку ios
+          cp -r $FLUTTER_ROOT/bin/cache/artifacts/engine/ios-release/Flutter.xcframework Flutter/
+          cd ..
 
       - name: Install pods
         run: |
@@ -50,6 +55,7 @@ jobs:
 
       - name: Build iOS
         run: |
+          # Собираем напрямую, отключая повторный pub get
           flutter build ios --release --no-codesign --no-pub
 
       - name: Upload iOS Build
