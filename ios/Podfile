@@ -1,4 +1,4 @@
-platform :ios, '13.0' # Возвращаем базовую 13.0 под твои плагины
+platform :ios, '14.0'
 
 flutter_root = ENV['FLUTTER_ROOT'] || '..'
 require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
@@ -17,18 +17,14 @@ post_install do |installer|
     flutter_additional_ios_managed_attributes(target) if respond_to?(:flutter_additional_ios_managed_attributes)
 
     target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
 
-      # ЖЕСТКИЙ ФИКС: Если CocoaPods пытается подсунуть флаг -G, мы его полностью стираем
-      if config.build_settings['OTHER_CFLAGS']
-        config.build_settings['OTHER_CFLAGS'].gsub!(/-G\b/, '')
-      end
-      if config.build_settings['OTHER_CPLUSPLUSFLAGS']
-        config.build_settings['OTHER_CPLUSPLUSFLAGS'].gsub!(/-G\b/, '')
-      end
+      # ЖЕСТКИЙ ФИКС: Принудительно прописываем пути к заголовочным файлам Flutter для всех плагинов
+      config.build_settings['HEADER_SEARCH_PATHS'] = '$(inherited) "$(SRCROOT)/Flutter" "$(SRCROOT)/Pods/Headers/Public" "$(SRCROOT)/Pods/Headers/Public/Flutter"'
+      config.build_settings['FRAMEWORK_SEARCH_PATHS'] = '$(inherited) "$(SRCROOT)/Flutter"'
 
-      # Дополнительно глушим предупреждения компилятора Xcode на сервере
-      config.build_settings['WARNING_CFLAGS'] = '-Wno-invalid-command-line-argument -Wno-unknown-argument'
+      # Разрешаем сборку на ARM64 без валидации кода (для no-codesign на CI)
+      config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'
     end
   end
 end
