@@ -1,4 +1,4 @@
-platform :ios, '14.0' # Подняли до 14.0
+platform :ios, '14.0'
 
 flutter_root = ENV['FLUTTER_ROOT'] || '..'
 require File.expand_path(File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb'))
@@ -15,8 +15,16 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
-      # Меняем таргет для всех внутренних подов Firebase на 14.0
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+
+      # УЛЬТИМАТИВНЫЙ ФИКС: Перезаписываем флаги компилятора, чтобы убрать легаси опции
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+
+      # Если Xcode встречает неизвестный флаг (вроде -G), он просто проигнорирует его, а не уронит сборку
+      config.build_settings['WARNING_CFLAGS'] = '-Wno-invalid-command-line-argument -Wno-unknown-argument'
+
+      # Запрещаем индексацию, которая иногда тащит за собой старые дебаг-флаги
+      config.build_settings['COMPILER_INDEX_STORE_ENABLE'] = 'NO'
     end
   end
 end
