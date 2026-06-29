@@ -77,7 +77,6 @@ class CartScreen extends StatelessWidget {
     );
   }
 
-  // --- ВИДЖЕТ ЭЛЕМЕНТА КОРЗИНЫ ---
   Widget _buildCartItem(BuildContext context, CartItem item, String userId) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -95,7 +94,6 @@ class CartScreen extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Красивое изображение с тенью
           Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
@@ -111,7 +109,6 @@ class CartScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 16),
-          // Информация о товаре
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,7 +127,6 @@ class CartScreen extends StatelessWidget {
               ],
             ),
           ),
-          // Контроллер количества (Stepper)
           Column(
             children: [
               _qtyButton(
@@ -155,7 +151,6 @@ class CartScreen extends StatelessWidget {
     );
   }
 
-  // --- НИЖНЯЯ ПАНЕЛЬ С ИТОГАМИ ---
   Widget _buildBottomSummary(BuildContext context, String userId, List<CartItem> cart) {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 34),
@@ -183,7 +178,6 @@ class CartScreen extends StatelessWidget {
           const SizedBox(height: 24),
           Row(
             children: [
-              // Кнопка очистки (иконка)
               Container(
                 decoration: BoxDecoration(
                   color: Colors.grey[100],
@@ -243,8 +237,6 @@ class CartScreen extends StatelessWidget {
       ),
     );
   }
-
-  // Кнопка +/- для количества
   Widget _qtyButton({required IconData icon, required Color color, required VoidCallback onTap}) {
     return GestureDetector(
       onTap: onTap,

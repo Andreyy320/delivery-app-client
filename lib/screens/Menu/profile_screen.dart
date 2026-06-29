@@ -52,7 +52,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // --- ЭКРАН ВХОДА (КОГДА НЕ АВТОРИЗОВАН) ---
   Widget _buildAuthButtons() {
     return Scaffold(
       backgroundColor: Colors.white,
@@ -139,7 +138,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // --- ОСНОВНОЙ ЭКРАН ПРОФИЛЯ ---
   Widget _buildProfile() {
     final name = currentUser?['name'] ?? 'Гость';
     final phone = currentUser?['phone'] ?? 'Не указан';
@@ -151,7 +149,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         physics: const BouncingScrollPhysics(),
         child: Column(
           children: [
-            // ВЕРХНЯЯ ЧАСТЬ
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(24, 60, 24, 40),
@@ -196,7 +193,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             const SizedBox(height: 30),
 
-            // МЕНЮ
+
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
@@ -213,16 +210,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const OrdersStatusScreen()));
                     }),
                   ]),
-
                   const SizedBox(height: 25),
                   _buildSectionTitle('НАСТРОЙКИ'),
                   _buildMenuCard([
                     _menuItem(Icons.lock_person_rounded, 'Изменить пароль', () {
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangePasswordScreen()));
                     }),
-
-
-                    // --- НОВАЯ КНОПКА ТУТ ---
                     _menuItem(Icons.storefront_rounded, 'Стать партнером', () {
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const BusinessRegistrationScreen()));
                     }),

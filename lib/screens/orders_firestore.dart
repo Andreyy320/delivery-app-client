@@ -5,7 +5,6 @@ import '../screens/Menu/Cart_data.dart';
 class OrdersService {
   static final _firestore = FirebaseFirestore.instance;
 
-  // 1. Добавляем параметры, которые передает CheckoutScreen (shopId, restaurantName и т.д.)
   static Future<void> addOrder(
       String userId,
       List<CartItem> cart, {
@@ -16,24 +15,23 @@ class OrdersService {
       }) async {
     final orderData = {
       'userId': userId,
-      'shopId': shopId, // 🔹 Добавлено
-      'restaurantName': restaurantName, // 🔹 Добавлено
+      'shopId': shopId,
+      'restaurantName': restaurantName,
       'items': cart.map((item) => {
         'name': item.dish.name,
         'price': item.dish.price,
         'quantity': item.quantity,
-        'description': item.dish.description, // 🔹 Нужно для модели Order
-        'category': item.dish.category,       // 🔹 Нужно для модели Order
-        'imagePath': item.dish.imagePath,     // 🔹 Чтобы видеть картинки в истории
+        'description': item.dish.description,
+        'category': item.dish.category,
+        'imagePath': item.dish.imagePath,
       }).toList(),
       'total': cart.fold<double>(0, (sum, item) => sum + item.dish.price * item.quantity),
-      'status': 'new', // 🔹 В CheckoutScreen мы используем 'new' или 'preparing'
-      'paymentMethod': paymentMethod, // 🔹 Добавлено
-      'comment': comment,             // 🔹 Добавлено
-      'createdAt': FieldValue.serverTimestamp(), // 🔹 В модели мы назвали это createdAt (без нижнего подчеркивания)
+      'status': 'new',
+      'paymentMethod': paymentMethod,
+      'comment': comment,
+      'createdAt': FieldValue.serverTimestamp(),
     };
 
-    // Сохраняем в общую коллекцию (как ты и хотел изначально)
     await _firestore.collection('orders').add(orderData);
   }
 

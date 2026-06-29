@@ -62,29 +62,43 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
     }
   }
 
-  // --- ФУНКЦИЯ ПЕРЕВОДА СТАТУСОВ ---
   String _translateStatus(String status) {
     switch (status.toLowerCase()) {
-      case 'new':
-        return 'Новый';
-      case 'accepted':
-        return 'Принят';
-      case 'preparing':
-        return 'Готовится';
-      case 'ready':
-        return 'Готов';
+      case 'new': return 'Новый';
+      case 'accepted': return 'Принят';
+      case 'preparing': return 'Готовится';
+      case 'ready': return 'Готов';
       case 'in_progress':
       case 'inprogress':
-      case 'delivering':
-        return 'В пути';
+      case 'delivering': return 'В пути';
       case 'delivered':
-      case 'completed':
-        return 'Доставлен';
-      case 'cancelled':
-        return 'Отменен';
-      default:
-        return status;
+      case 'completed': return 'Доставлен';
+      case 'cancelled': return 'Отменен';
+      default: return status;
     }
+  }
+
+  Widget _buildCancelledWidget() {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.withOpacity(0.2)),
+      ),
+      child: const Center(
+        child: Text(
+          "ЗАКАЗ ОТМЕНЕН",
+          style: TextStyle(
+            color: Colors.red,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.5,
+            fontSize: 14,
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildProgressBar(List<bool> steps, List<IconData> icons, List<String> labels, Color activeColor) {
@@ -133,45 +147,19 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
     );
   }
 
-  // --- КАРТОЧКА ЕДЫ / МАГАЗИНОВ ---
   Widget buildFoodOrderCard(Order order) {
     bool isCancelled = order.status == 'cancelled';
-
     String title = 'Заказ из ресторана';
     String prepLabel = 'Готовим';
     IconData prepIcon = Icons.restaurant;
     Color themeColor = Colors.deepOrange;
 
-    if (order.type == 'apteka') {
-      title = 'Заказ из аптеки';
-      prepLabel = 'Собираем';
-      prepIcon = Icons.medical_services;
-      themeColor = Colors.teal;
-    } else if (order.type == 'electronika') {
-      title = 'Заказ электроники';
-      prepLabel = 'Собираем';
-      prepIcon = Icons.devices;
-      themeColor = Colors.indigo;
-    } else if (order.type == 'product') {
-      title = 'Заказ продуктов';
-      prepLabel = 'Собираем';
-      prepIcon = Icons.shopping_basket;
-      themeColor = Colors.green;
-    } else if (order.type == 'svetok') {
-      title = 'Заказ цветов';
-      prepLabel = 'Собираем';
-      prepIcon = Icons.local_florist;
-      themeColor = Colors.pinkAccent;
-    }
+    if (order.type == 'apteka') { title = 'Заказ из аптеки'; prepLabel = 'Собираем'; prepIcon = Icons.medical_services; themeColor = Colors.teal; }
+    else if (order.type == 'electronika') { title = 'Заказ электроники'; prepLabel = 'Собираем'; prepIcon = Icons.devices; themeColor = Colors.indigo; }
+    else if (order.type == 'product') { title = 'Заказ продуктов'; prepLabel = 'Собираем'; prepIcon = Icons.shopping_basket; themeColor = Colors.green; }
+    else if (order.type == 'svetok') { title = 'Заказ цветов'; prepLabel = 'Собираем'; prepIcon = Icons.local_florist; themeColor = Colors.pinkAccent; }
 
-    final steps = [
-      true,
-      order.startedAt != null,
-      order.readyAt != null,
-      order.acceptedAt != null || order.inProgressAt != null,
-      order.deliveredAt != null
-    ];
-
+    final steps = [true, order.startedAt != null, order.readyAt != null, order.acceptedAt != null || order.inProgressAt != null, order.deliveredAt != null];
     final icons = [Icons.receipt_long, prepIcon, Icons.takeout_dining, Icons.delivery_dining, Icons.check_circle];
     final labels = ['Создан', prepLabel, 'Готов', 'В пути', 'У вас'];
 
@@ -189,20 +177,13 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
             child: Text('• ${item.dish.name} x${item.quantity}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
           )),
           const Divider(height: 24),
-          if (isCancelled)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(child: Text("ЗАКАЗ ОТМЕНЕН", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, letterSpacing: 1.2))),
-            )
-          else
-            _buildProgressBar(steps, icons, labels, themeColor),
+          isCancelled ? _buildCancelledWidget() : _buildProgressBar(steps, icons, labels, themeColor),
           Text('${order.total.toInt()} Руб', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
         ],
       ),
     );
   }
 
-  // --- КАРТОЧКА ДОСТАВКИ ---
   Widget buildDeliveryOrderCard(DeliveryOrder order) {
     bool isCancelled = order.status == 'cancelled';
     final steps = [true, order.acceptedAt != null, order.inProgressAt != null, order.deliveredAt != null];
@@ -220,20 +201,13 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
         children: [
           _locationRow(Icons.radio_button_checked, 'Откуда', Colors.blue),
           _locationRow(Icons.location_on, 'Куда', Colors.redAccent),
-          if (isCancelled)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(child: Text("ЗАКАЗ ОТМЕНЕН", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, letterSpacing: 1.2))),
-            )
-          else
-            _buildProgressBar(steps, icons, labels, Colors.blueAccent),
+          isCancelled ? _buildCancelledWidget() : _buildProgressBar(steps, icons, labels, Colors.blueAccent),
           Text('${order.totalCost.toInt()} Руб', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
         ],
       ),
     );
   }
 
-  // --- КАРТОЧКА ГРУЗОПЕРЕВОЗОК ---
   Widget buildCargoCard(String type, dynamic order, Color color, String collection) {
     bool isCancelled = order.status == 'cancelled';
     final steps = [true, order.acceptedAt != null, order.inProgressAt != null, order.deliveredAt != null];
@@ -252,13 +226,7 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
           Text('${order.fromAddress} → ${order.toAddress}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
           const SizedBox(height: 4),
           Text('Кузов: ${order.bodyType} • Грузчики: ${order.loaders}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-          if (isCancelled)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(child: Text("ЗАКАЗ ОТМЕНЕН", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, letterSpacing: 1.2))),
-            )
-          else
-            _buildProgressBar(steps, icons, labels, color),
+          isCancelled ? _buildCancelledWidget() : _buildProgressBar(steps, icons, labels, color),
           Text('${order.totalPrice.toInt()} Руб', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.black)),
         ],
       ),

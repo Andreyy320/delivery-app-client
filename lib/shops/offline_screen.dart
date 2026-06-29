@@ -13,7 +13,6 @@ class OfflineScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Красивая иконка или картинка
               Icon(Icons.wifi_off_rounded, size: 100, color: Colors.grey[300]),
               const SizedBox(height: 30),
               const Text(
@@ -28,7 +27,6 @@ class OfflineScreen extends StatelessWidget {
                 style: TextStyle(fontSize: 14, color: Colors.grey[600], height: 1.5),
               ),
               const SizedBox(height: 40),
-              // Можно добавить лоадер, который крутится, пока ждем сеть
               const CircularProgressIndicator(color: Colors.black, strokeWidth: 2),
             ],
           ),

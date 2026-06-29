@@ -67,7 +67,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
-  // Считаем общую сумму блюд (Заведение)
   double get totalItemsPrice => cartNotifier.value.fold(0, (sum, item) => sum + item.dish.price * item.quantity);
 
   Future<void> _addToHistory(LatLng location) async {
@@ -122,7 +121,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
         setState(() {
           _deliveryLocation = destination;
-          _deliveryPrice = 25.0 + (roadDistanceKm * 8.0);
+          _deliveryPrice = 100.0 + (roadDistanceKm * 10.0);
           _estimatedMinutes = travelTimeMin.round() + 10;
         });
 
@@ -158,7 +157,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
       await _addToHistory(_deliveryLocation!);
 
-      // Разделение цен для записи в БД
       double itemsPrice = totalItemsPrice.roundToDouble();
       double deliveryPrice = _deliveryPrice.roundToDouble();
       double totalOrderPrice = itemsPrice + deliveryPrice;
@@ -173,7 +171,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         paymentMethod: _selectedPayment,
         lat: _deliveryLocation!.latitude,
         lng: _deliveryLocation!.longitude,
-        // Передаем разделенные цены
         itemsPrice: itemsPrice,
         deliveryPrice: deliveryPrice,
         totalPrice: totalOrderPrice,

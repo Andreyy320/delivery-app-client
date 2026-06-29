@@ -180,7 +180,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return (o as MejCityDeliveryOrder).createdAt;
   }
 
-  // --- ИСПРАВЛЕННАЯ КАРТОЧКА ЭКСПРЕСС КУРЬЕРА ---
   Widget _buildExpressCard(DeliveryOrder order) {
     String fromCoord = "${order.pickup.latitude.toStringAsFixed(6)}, ${order.pickup.longitude.toStringAsFixed(6)}";
     String toCoord = "${order.dropoff.latitude.toStringAsFixed(6)}, ${order.dropoff.longitude.toStringAsFixed(6)}";
@@ -287,7 +286,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  // --- ИСПРАВЛЕННАЯ СТИЛЬНАЯ БАЗОВАЯ КАРТОЧКА С ДАТОЙ ПОД НАЗВАНИЕМ ---
   Widget _baseCard({required Color color, required String title, required DateTime dateTime, required String path, required String id, required Widget child}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -304,7 +302,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
               crossAxisAlignment: CrossAxisAlignment.start, // Чтобы крестик выравнивался аккуратно по верхней линии
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Блок с иконкой, названием и датой снизу
                 Expanded(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -336,7 +333,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     ],
                   ),
                 ),
-                // Кнопка удаления справа вверху
                 IconButton(
                   onPressed: () => _deleteOrder(path, id),
                   icon: const Icon(Icons.close, size: 16, color: Colors.black26),

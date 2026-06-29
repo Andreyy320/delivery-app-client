@@ -12,13 +12,11 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
 
-  // 🔹 Безопасная инициализация Firebase
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
-    // Инициализация уведомлений только если Firebase взлетел
     FirebaseMessaging messaging = FirebaseMessaging.instance;
     await messaging.requestPermission(
       alert: true,
@@ -26,8 +24,6 @@ void main() async {
       sound: true,
     );
   } catch (e) {
-    // ВАЖНО: Если тут ошибка, ты увидишь её при дебаге.
-    // Приложение НЕ зависнет на белом экране, а пойдет дальше.
     debugPrint('FIREBASE INIT ERROR: $e');
   }
 

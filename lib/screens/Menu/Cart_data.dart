@@ -18,12 +18,9 @@ final Map<String, Map<String?, ValueNotifier<List<CartItem>>>> cartByUser = {};
 
 ValueNotifier<List<CartItem>> getCart(String userId, [String? shopId]) {
   final userCart = cartByUser.putIfAbsent(userId, () => {});
-  // Если shopId пустой (null), это наша "Общая" корзина для нижней панели
   return userCart.putIfAbsent(shopId, () => ValueNotifier([]));
 }
 
-// --- НОВАЯ ФУНКЦИЯ ДЛЯ ПРОВЕРКИ ---
-// Возвращает shopId того заведения, чьи товары уже лежат в корзине
 String? getExistingShopId(String userId) {
   final userCarts = cartByUser[userId];
   if (userCarts == null) return null;
@@ -36,19 +33,16 @@ String? getExistingShopId(String userId) {
   return null;
 }
 
-// 2. Добавление (ТЕПЕРЬ С ЖЕСТКОЙ ПРОВЕРКОЙ)
 void addToCartItem(String userId, String shopId, Dish dish, {BuildContext? context}) {
   final existingShopId = getExistingShopId(userId);
 
-  // Если в корзине уже есть товары из ДРУГОГО магазина
   if (existingShopId != null && existingShopId != shopId) {
     if (context != null) {
       _showClearCartDialog(context, userId, shopId, dish);
     }
-    return; // Блокируем добавление
+    return;
   }
 
-  // Если всё ок или корзина пуста — добавляем как обычно
   final cart = getCart(userId, shopId);
   final index = cart.value.indexWhere((e) => e.dish.name == dish.name);
 
@@ -59,11 +53,10 @@ void addToCartItem(String userId, String shopId, Dish dish, {BuildContext? conte
   }
 
   cart.value = List.from(cart.value);
-  currentActiveShopId.value = shopId; // Запоминаем текущий магазин
+  currentActiveShopId.value = shopId;
   _syncCombinedCart(userId);
 }
 
-// --- ДИАЛОГ ОЧИСТКИ КОРЗИНЫ ---
 void _showClearCartDialog(BuildContext context, String userId, String newShopId, Dish dish) {
   showDialog(
     context: context,
@@ -77,9 +70,9 @@ void _showClearCartDialog(BuildContext context, String userId, String newShopId,
         ),
         TextButton(
           onPressed: () {
-            clearCart(userId); // Чистим всё
+            clearCart(userId);
             Navigator.pop(context);
-            addToCartItem(userId, newShopId, dish); // Добавляем новый товар
+            addToCartItem(userId, newShopId, dish);
           },
           child: const Text("Очистить и добавить", style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold)),
         ),
@@ -88,7 +81,6 @@ void _showClearCartDialog(BuildContext context, String userId, String newShopId,
   );
 }
 
-// 3. Уменьшение количества
 void removeFromCart(String userId, String shopId, CartItem item) {
   final cart = getCart(userId, shopId);
   final index = cart.value.indexWhere((e) => e.dish.name == item.dish.name);
@@ -133,7 +125,6 @@ void clearCart(String userId, [String? shopId]) {
   if (shopId != null) {
     getCart(userId, shopId).value = [];
   } else {
-    // Если shopId не передан — чистим ВООБЩЕ ВСЕ корзины всех магазинов
     cartByUser[userId]?.forEach((key, notifier) {
       notifier.value = [];
     });
