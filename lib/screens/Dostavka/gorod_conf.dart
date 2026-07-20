@@ -177,43 +177,77 @@ class _GorodOrderConfirmationScreenState extends State<GorodOrderConfirmationScr
     return '$dayText, $hour:$minute';
   }
 
-  // ИСПРАВЛЕННЫЙ МЕТОД: Закрывает всё и уходит на главную
   void _showSuccessDialog() {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (BuildContext dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 20),
-            const Icon(Icons.check_circle_rounded, color: Colors.green, size: 80),
-            const SizedBox(height: 20),
-            const Text('Готово!', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-            const SizedBox(height: 10),
-            const Text('Заказ успешно создан.\nМы скоро свяжемся с вами.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 30),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                  padding: const EdgeInsets.symmetric(vertical: 18),
+      builder: (BuildContext dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withOpacity(0.12),
+                  shape: BoxShape.circle,
                 ),
-                onPressed: () {
-                  // 1. Закрываем само модальное окно
-                  Navigator.of(dialogContext).pop();
-                  // 2. Сбрасываем весь стек до самого первого экрана (Главной)
-                  Navigator.of(context).popUntil((route) => route.isFirst);
-                },
-                child: const Text('ОТЛИЧНО', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  color: Color(0xFF10B981),
+                  size: 44,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 20),
+              const Text(
+                'Заказ оформлен!',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF0F172A),
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Мы получили ваши данные.\nВодитель скоро свяжется с вами.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Color(0xFF64748B),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 28),
+              SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F172A),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 0,
+                  ),
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                  },
+                  child: const Text(
+                    'ОТЛИЧНО',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, letterSpacing: 0.5),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -222,15 +256,43 @@ class _GorodOrderConfirmationScreenState extends State<GorodOrderConfirmationScr
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FB),
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Проверка заказа', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900)),
+        title: const Text(
+          'Проверка заказа',
+          style: TextStyle(
+            color: Color(0xFF0F172A),
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+            letterSpacing: -0.3,
+          ),
+        ),
         centerTitle: true,
-        backgroundColor: Colors.transparent,
+        backgroundColor: const Color(0xFFF8FAFC),
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
+        surfaceTintColor: Colors.transparent,
+        leadingWidth: 68,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 16, top: 6, bottom: 6),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF0F172A).withOpacity(0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 16),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
         ),
       ),
       body: SingleChildScrollView(
@@ -239,17 +301,24 @@ class _GorodOrderConfirmationScreenState extends State<GorodOrderConfirmationScr
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
             children: [
+              const SizedBox(height: 10),
               // Карта
               Container(
-                height: 240,
+                height: 220,
                 width: double.infinity,
-                margin: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15)],
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0F172A).withOpacity(0.04),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(30),
+                  borderRadius: BorderRadius.circular(22),
                   child: Stack(
                     children: [
                       FlutterMap(
@@ -264,66 +333,187 @@ class _GorodOrderConfirmationScreenState extends State<GorodOrderConfirmationScr
                             subdomains: const ['a', 'b', 'c', 'd'],
                           ),
                           if (routePoints.isNotEmpty)
-                            PolylineLayer(polylines: [
-                              Polyline(points: routePoints, color: Colors.deepOrange, strokeWidth: 5.0),
-                            ]),
-                          MarkerLayer(markers: [
-                            Marker(
-                              point: LatLng(widget.pickup['lat']!, widget.pickup['lng']!),
-                              child: const Icon(Icons.radio_button_checked, color: Colors.green, size: 24),
+                            PolylineLayer(
+                              polylines: [
+                                Polyline(
+                                  points: routePoints,
+                                  color: const Color(0xFFD97706),
+                                  strokeWidth: 4.5,
+                                ),
+                              ],
                             ),
-                            Marker(
-                              point: LatLng(widget.dropoff['lat']!, widget.dropoff['lng']!),
-                              child: const Icon(Icons.location_on, color: Colors.deepOrange, size: 30),
-                            ),
-                          ]),
+                          MarkerLayer(
+                            markers: [
+                              Marker(
+                                point: LatLng(widget.pickup['lat']!, widget.pickup['lng']!),
+                                width: 32,
+                                height: 32,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF0F172A),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 2.5),
+                                  ),
+                                  child: const Icon(Icons.circle, color: Colors.white, size: 10),
+                                ),
+                              ),
+                              Marker(
+                                point: LatLng(widget.dropoff['lat']!, widget.dropoff['lng']!),
+                                width: 36,
+                                height: 36,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFD97706),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 2.5),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFFD97706).withOpacity(0.4),
+                                        blurRadius: 8,
+                                      )
+                                    ],
+                                  ),
+                                  child: const Icon(Icons.location_on_rounded, color: Colors.white, size: 20),
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                       if (isLoadingRoute)
-                        const Center(child: CircularProgressIndicator(color: Colors.deepOrange)),
+                        Container(
+                          color: Colors.white.withOpacity(0.6),
+                          child: const Center(
+                            child: CircularProgressIndicator(color: Color(0xFFD97706), strokeWidth: 3),
+                          ),
+                        ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+
+              // Блок маршрута
               _containerWrapper(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildRouteItem(Icons.radio_button_checked, Colors.green, 'ОТКУДА', widget.fromAddress),
-                    _lineDivider(),
-                    _buildRouteItem(Icons.location_on, Colors.deepOrange, 'КУДА', widget.toAddress),
+                    const Text(
+                      'МАРШРУТ',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF94A3B8),
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _buildRouteItem(Icons.circle_outlined, const Color(0xFF0F172A), 'ОТКУДА', widget.fromAddress),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 17),
+                      child: Container(
+                        height: 18,
+                        width: 2,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFCBD5E1),
+                          borderRadius: BorderRadius.circular(1),
+                        ),
+                      ),
+                    ),
+                    _buildRouteItem(Icons.location_on_rounded, const Color(0xFFD97706), 'КУДА', widget.toAddress),
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+
+              // Блок деталей
               _containerWrapper(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildDetailRow(Icons.local_shipping_outlined, 'Кузов', 'Тип ${widget.bodySize}'),
+                    const Text(
+                      'ДЕТАЛИ ДОСТАВКИ',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF94A3B8),
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _buildDetailRow(Icons.local_shipping_outlined, 'Тип кузова', 'Класс ${widget.bodySize}'),
                     _divider(),
                     _buildDetailRow(Icons.groups_outlined, 'Грузчики', widget.loaders == 0 ? "Не нужны" : '${widget.loaders} чел.'),
                     _divider(),
-                    _buildDetailRow(Icons.access_time, 'Время', _formatTime()),
+                    _buildDetailRow(Icons.access_time_rounded, 'Время подачи', _formatTime()),
                   ],
                 ),
               ),
-              const SizedBox(height: 30),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Итого', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 18)),
-                  Text('${widget.totalPrice} Руб', style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900)),
-                ],
+              const SizedBox(height: 20),
+
+              // Итоговая стоимость
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFFFBEB), Color(0xFFFEF3C7)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFFDE68A)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'К ОПЛАТЕ',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFFB45309),
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Итоговая цена',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF78350F),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '${widget.totalPrice} Руб',
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF78350F),
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 25),
+              const SizedBox(height: 24),
+
+              // Кнопка подтверждения
               SizedBox(
                 width: double.infinity,
-                height: 65,
+                height: 58,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepOrange,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-                    elevation: 10,
+                    backgroundColor: const Color(0xFFD97706),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    elevation: 4,
+                    shadowColor: const Color(0xFFD97706).withOpacity(0.35),
                   ),
                   onPressed: isSubmitting ? null : () async {
                     try {
@@ -332,17 +522,36 @@ class _GorodOrderConfirmationScreenState extends State<GorodOrderConfirmationScr
                     } catch (e) {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red)
+                          SnackBar(
+                            content: Text('Ошибка: $e', style: const TextStyle(fontWeight: FontWeight.w700)),
+                            backgroundColor: const Color(0xFF0F172A),
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
                         );
                       }
                     }
                   },
                   child: isSubmitting
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('ПОДТВЕРДИТЬ ЗАКАЗ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
+                      ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                  )
+                      : const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'ПОДТВЕРДИТЬ ЗАКАЗ',
+                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, letterSpacing: 0.5),
+                      ),
+                      SizedBox(width: 10),
+                      Icon(Icons.arrow_forward_rounded, size: 20),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 40),
+              SizedBox(height: MediaQuery.of(context).padding.bottom + 20),
             ],
           ),
         ),
@@ -352,30 +561,55 @@ class _GorodOrderConfirmationScreenState extends State<GorodOrderConfirmationScr
 
   Widget _containerWrapper({required Widget child}) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withOpacity(0.02),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: child,
     );
   }
 
-  Widget _lineDivider() => Container(margin: const EdgeInsets.only(left: 8), alignment: Alignment.centerLeft, child: Container(width: 2, height: 15, color: Colors.grey[100]));
-  Widget _divider() => Divider(height: 24, color: Colors.grey[100], thickness: 1.5);
+  Widget _divider() => const Padding(
+    padding: EdgeInsets.symmetric(vertical: 12),
+    child: Divider(height: 1, color: Color(0xFFF1F5F9)),
+  );
 
   Widget _buildRouteItem(IconData icon, Color color, String label, String text) {
     return Row(
       children: [
-        Icon(icon, color: color, size: 22),
-        const SizedBox(width: 15),
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: color, size: 18),
+        ),
+        const SizedBox(width: 14),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w900)),
-              Text(text, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(
+                label,
+                style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8), fontWeight: FontWeight.w800, letterSpacing: 0.8),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                text,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
           ),
         ),
@@ -386,11 +620,24 @@ class _GorodOrderConfirmationScreenState extends State<GorodOrderConfirmationScr
   Widget _buildDetailRow(IconData icon, String label, String value) {
     return Row(
       children: [
-        Icon(icon, size: 22, color: Colors.grey[400]),
-        const SizedBox(width: 15),
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54)),
+        Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, size: 18, color: const Color(0xFF64748B)),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF64748B), fontSize: 14),
+        ),
         const Spacer(),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
+        Text(
+          value,
+          style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF0F172A), fontSize: 14),
+        ),
       ],
     );
   }

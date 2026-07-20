@@ -80,8 +80,11 @@ class _AptekaMenuScreenState extends State<AptekaMenuScreen> {
         _isManualScrolling = true;
         _activeCategory = category;
       });
-      await Scrollable.ensureVisible(context,
-          duration: const Duration(milliseconds: 600), curve: Curves.easeInOutQuart);
+      await Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeInOutQuart,
+      );
       setState(() => _isManualScrolling = false);
     }
   }
@@ -91,14 +94,22 @@ class _AptekaMenuScreenState extends State<AptekaMenuScreen> {
     final userId = FirebaseAuth.instance.currentUser?.uid ?? "";
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FB),
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: Text(widget.restaurantName,
-            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: -0.5)),
+        title: Text(
+          widget.restaurantName,
+          style: const TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 20,
+            letterSpacing: -0.5,
+            color: Color(0xFF0F172A),
+          ),
+        ),
         centerTitle: true,
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        backgroundColor: const Color(0xFFF8FAFC),
+        foregroundColor: const Color(0xFF0F172A),
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
         actions: [
           ValueListenableBuilder<List<CartItem>>(
             valueListenable: getCart(userId, widget.shopId),
@@ -107,9 +118,20 @@ class _AptekaMenuScreenState extends State<AptekaMenuScreen> {
                 alignment: Alignment.center,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.shopping_bag_outlined, size: 28),
-                    onPressed: () => Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => CartScreen(shopId: widget.shopId, restaurantName: widget.restaurantName))),
+                    icon: const Icon(
+                      Icons.shopping_bag_outlined,
+                      size: 26,
+                      color: Color(0xFF0F172A),
+                    ),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CartScreen(
+                          shopId: widget.shopId,
+                          restaurantName: widget.restaurantName,
+                        ),
+                      ),
+                    ),
                   ),
                   if (cart.isNotEmpty)
                     PositionByRelative(cart.length.toString()),
@@ -128,86 +150,163 @@ class _AptekaMenuScreenState extends State<AptekaMenuScreen> {
             .where('isAvailable', isEqualTo: true)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.hasError) return const Center(child: Text('Ошибка загрузки'));
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.deepOrange));
+          if (snapshot.hasError) {
+            return const Center(
+              child: Text(
+                'Ошибка загрузки',
+                style: TextStyle(color: Color(0xFF64748B)),
+              ),
+            );
+          }
+          if (!snapshot.hasData) {
+            return const Center(
+              child: CircularProgressIndicator(
+                color: Color(0xFF0F172A),
+                strokeWidth: 2.5,
+              ),
+            );
+          }
 
-          final allItems = snapshot.data!.docs.map((doc) => Dish.fromFirestore(doc)).toList();
-          final filteredItems = allItems.where((item) =>
+          final allItems = snapshot.data!.docs
+              .map((doc) => Dish.fromFirestore(doc))
+              .toList();
+          final filteredItems = allItems
+              .where((item) =>
           item.name.toLowerCase().contains(_searchQuery) ||
-              item.category.toLowerCase().contains(_searchQuery)).toList();
+              item.category.toLowerCase().contains(_searchQuery))
+              .toList();
 
-          final currentCategories = filteredItems.map((e) => e.category).toSet().toList();
+          final currentCategories =
+          filteredItems.map((e) => e.category).toSet().toList();
           if (_categories.join() != currentCategories.join()) {
             _categories = currentCategories;
             for (var cat in _categories) {
               _categoryKeys.putIfAbsent(cat, () => GlobalKey());
             }
-            if (_categories.isNotEmpty && _activeCategory.isEmpty) _activeCategory = _categories.first;
+            if (_categories.isNotEmpty && _activeCategory.isEmpty) {
+              _activeCategory = _categories.first;
+            }
           }
 
           return Column(
             children: [
-              Container(
-                color: Colors.white,
+              // ПОЛЕ ПОИСКА ЛЕКАРСТВ
+              Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(16),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF0F172A).withOpacity(0.04),
+                        blurRadius: 14,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: TextField(
-                    onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+                    onChanged: (v) =>
+                        setState(() => _searchQuery = v.toLowerCase()),
+                    style: const TextStyle(
+                      color: Color(0xFF0F172A),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
                     decoration: const InputDecoration(
                       hintText: 'Поиск лекарств...',
-                      hintStyle: TextStyle(color: Colors.grey, fontSize: 15),
-                      prefixIcon: Icon(Icons.search_rounded, color: Colors.black54),
+                      hintStyle:
+                      TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+                      prefixIcon: Icon(
+                        Icons.search_rounded,
+                        color: Color(0xFF64748B),
+                        size: 22,
+                      ),
                       border: InputBorder.none,
                       contentPadding: EdgeInsets.symmetric(vertical: 12),
                     ),
                   ),
                 ),
               ),
-              Container(
-                height: 60,
-                color: Colors.white,
-                child: ListView.builder(
-                  controller: _categoryScrollController,
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _categories.length,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemBuilder: (context, index) {
-                    final cat = _categories[index];
-                    final isActive = _activeCategory == cat;
-                    return GestureDetector(
-                      onTap: () => _scrollToCategory(cat),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        decoration: BoxDecoration(
-                          color: isActive ? Colors.black : Colors.white,
-                          borderRadius: BorderRadius.circular(14),
-                          boxShadow: isActive
-                              ? [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 4))]
-                              : [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 4)],
+
+              // ГОРИЗОНТАЛЬНОЕ МЕНЮ КАТЕГОРИЙ
+              if (_categories.isNotEmpty)
+                SizedBox(
+                  height: 52,
+                  child: ListView.builder(
+                    controller: _categoryScrollController,
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _categories.length,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    physics: const BouncingScrollPhysics(),
+                    itemBuilder: (context, index) {
+                      final cat = _categories[index];
+                      final isActive = _activeCategory == cat;
+                      return GestureDetector(
+                        onTap: () => _scrollToCategory(cat),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 250),
+                          margin: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? const Color(0xFF0F172A)
+                                : Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isActive
+                                  ? Colors.transparent
+                                  : Colors.black.withOpacity(0.05),
+                            ),
+                            boxShadow: isActive
+                                ? [
+                              BoxShadow(
+                                color: const Color(0xFF0F172A)
+                                    .withOpacity(0.2),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              )
+                            ]
+                                : [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.02),
+                                blurRadius: 4,
+                              )
+                            ],
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            cat,
+                            style: TextStyle(
+                              color: isActive
+                                  ? Colors.white
+                                  : const Color(0xFF475569),
+                              fontWeight: isActive
+                                  ? FontWeight.w800
+                                  : FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
                         ),
-                        alignment: Alignment.center,
-                        child: Text(cat, style: TextStyle(
-                            color: isActive ? Colors.white : Colors.black87,
-                            fontWeight: isActive ? FontWeight.bold : FontWeight.w500)),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
-              ),
+
+              // СПИСОК КАТЕГОРИЙ И КАРТОЧЕК
               Expanded(
                 child: ListView.builder(
                   controller: _scrollController,
-                  padding: const EdgeInsets.only(top: 10, bottom: 20),
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.only(top: 10, bottom: 30),
                   itemCount: _categories.length,
                   itemBuilder: (context, index) {
                     final category = _categories[index];
-                    final itemsInCategory = filteredItems.where((i) => i.category == category).toList();
+                    final itemsInCategory = filteredItems
+                        .where((i) => i.category == category)
+                        .toList();
 
                     if (itemsInCategory.isEmpty) return const SizedBox.shrink();
 
@@ -216,19 +315,27 @@ class _AptekaMenuScreenState extends State<AptekaMenuScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 24, 16, 12),
-                          child: Text(category, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -1)),
+                          padding: const EdgeInsets.fromLTRB(20, 20, 16, 12),
+                          child: Text(
+                            category,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.6,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
                         ),
                         GridView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           padding: const EdgeInsets.symmetric(horizontal: 16),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            // Фиксированное соотношение для аптечного стиля
-                            childAspectRatio: 0.50,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
+                            childAspectRatio: 0.49,
+                            crossAxisSpacing: 14,
+                            mainAxisSpacing: 14,
                           ),
                           itemCount: itemsInCategory.length,
                           itemBuilder: (context, i) => PharmacyItemCard(
@@ -236,7 +343,7 @@ class _AptekaMenuScreenState extends State<AptekaMenuScreen> {
                             shopId: widget.shopId,
                           ),
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 12),
                       ],
                     );
                   },
@@ -250,149 +357,239 @@ class _AptekaMenuScreenState extends State<AptekaMenuScreen> {
   }
 }
 
-class PharmacyItemCard extends StatelessWidget {
+/// Стилизованная карточка медикамента / аптечного товара
+class PharmacyItemCard extends StatefulWidget {
   final Dish dish;
   final String shopId;
-  const PharmacyItemCard({required this.dish, required this.shopId, super.key});
+
+  const PharmacyItemCard({
+    required this.dish,
+    required this.shopId,
+    super.key,
+  });
+
+  @override
+  State<PharmacyItemCard> createState() => _PharmacyItemCardState();
+}
+
+class _PharmacyItemCardState extends State<PharmacyItemCard> {
+  bool _pressed = false;
+
+  String getUnit(String category) {
+    final cat = category.toLowerCase();
+    if (cat.contains('сироп') ||
+        cat.contains('капли') ||
+        cat.contains('спрей')) {
+      return "мл";
+    }
+    if (cat.contains('мазь') || cat.contains('гель')) {
+      return "г";
+    }
+    return "шт";
+  }
 
   @override
   Widget build(BuildContext context) {
     final userId = FirebaseAuth.instance.currentUser?.uid ?? "";
 
-    String getUnit(String category) {
-      final cat = category.toLowerCase();
-      if (cat.contains('сироп') || cat.contains('капли') || cat.contains('спрей')) {
-        return "мл";
-      }
-      if (cat.contains('мазь') || cat.contains('гель')) {
-        return "г";
-      }
-      return "шт";
-    }
-
     return ValueListenableBuilder<List<CartItem>>(
-      valueListenable: getCart(userId, shopId),
+      valueListenable: getCart(userId, widget.shopId),
       builder: (context, cart, _) {
-        final added = cart.any((item) => item.dish.name == dish.name);
+        final added = cart.any((item) => item.dish.name == widget.dish.name);
 
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              )
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // 1. Блок с фото (Квадрат)
-              AspectRatio(
-                aspectRatio: 1,
-                child: Container(
-                  margin: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF3F4F6),
-                    borderRadius: BorderRadius.circular(20),
+        return GestureDetector(
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTapCancel: () => setState(() => _pressed = false),
+          child: AnimatedScale(
+            scale: _pressed ? 0.97 : 1.0,
+            duration: const Duration(milliseconds: 120),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.black.withOpacity(0.04)),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0F172A).withOpacity(0.05),
+                    blurRadius: 16,
+                    offset: const Offset(0, 8),
+                  )
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // ИЗОБРАЖЕНИЕ С ЦЕННИКОМ
+                  AspectRatio(
+                    aspectRatio: 1,
+                    child: Container(
+                      margin: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: Image.network(
+                                widget.dish.imagePath,
+                                fit: BoxFit.cover,
+                                errorBuilder: (c, e, s) => const Icon(
+                                  Icons.medication_liquid_rounded,
+                                  color: Color(0xFF94A3B8),
+                                  size: 36,
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.95),
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.08),
+                                      blurRadius: 6,
+                                    )
+                                  ],
+                                ),
+                                child: Text(
+                                  "${widget.dish.price.toInt()} Руб",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 12,
+                                    color: Color(0xFF0F172A),
+                                  ),
+                                ),
+                              ),
+                            )
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: Stack(
+
+                  // ИНФОРМАЦИЯ О ТОВАРЕ
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    child: Column(
                       children: [
-                        Positioned.fill(
-                          child: Image.network(
-                            dish.imagePath,
-                            fit: BoxFit.cover,
-                            errorBuilder: (c, e, s) => const Icon(Icons.medication_liquid_rounded, color: Colors.grey, size: 40),
+                        SizedBox(
+                          height: 48,
+                          child: Center(
+                            child: Text(
+                              widget.dish.name,
+                              textAlign: TextAlign.center,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                height: 1.15,
+                                letterSpacing: -0.3,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
                           ),
                         ),
-                        Positioned(
-                          top: 8, right: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.9),
-                                borderRadius: BorderRadius.circular(10)
-                            ),
-                            child: Text("${dish.price.toInt()} Руб",
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        const SizedBox(height: 2),
+                        Text(
+                          "${widget.dish.weight} ${getUnit(widget.dish.category)}",
+                          style: const TextStyle(
+                            color: Color(0xFF6366F1),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
                           ),
-                        )
+                        ),
+                        const SizedBox(height: 4),
+                        SizedBox(
+                          height: 38,
+                          child: Text(
+                            widget.dish.description,
+                            textAlign: TextAlign.center,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Color(0xFF64748B),
+                              height: 1.15,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                ),
+
+                  const Spacer(),
+
+                  // КНОПКА ДОБАВЛЕНИЯ В КОРЗИНУ
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
+                    child: GestureDetector(
+                      onTap: () => addToCartItem(
+                        userId,
+                        widget.shopId,
+                        widget.dish,
+                        context: context,
+                      ),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 250),
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: added
+                              ? const Color(0xFFF1F5F9)
+                              : const Color(0xFF0F172A),
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: added
+                              ? []
+                              : [
+                            BoxShadow(
+                              color: const Color(0xFF0F172A)
+                                  .withOpacity(0.25),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            )
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (added) ...[
+                              const Icon(
+                                Icons.check_rounded,
+                                size: 16,
+                                color: Color(0xFF0F172A),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            Text(
+                              added ? "В КОРЗИНЕ" : "КУПИТЬ",
+                              style: TextStyle(
+                                color: added
+                                    ? const Color(0xFF0F172A)
+                                    : Colors.white,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 11,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  )
+                ],
               ),
-
-              // 2. Инфо-блок с фиксированными высотами
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                child: Column(
-                  children: [
-                    // Название - фиксируем на 2 строки (высота ~34)
-                    SizedBox(
-                      height: 34,
-                      child: Text(
-                          dish.name,
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, height: 1.2)
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                        "${dish.weight} ${getUnit(dish.category)}",
-                        style: TextStyle(color: Colors.blueAccent[200], fontSize: 11, fontWeight: FontWeight.bold)
-                    ),
-                    const SizedBox(height: 4),
-                    // Описание - фиксируем высоту (под 5 строк, высота ~56)
-                    SizedBox(
-                      height: 56,
-                      child: Text(
-                          dish.description,
-                          textAlign: TextAlign.center,
-                          maxLines: 5,
-                          // Если текста меньше, будет пустое пространство, если больше - обрежется.
-                          // Это гарантирует, что кнопка ниже не "прыгнет".
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 10, color: Colors.black45, height: 1.1)
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const Spacer(), // Занимает всё свободное место до кнопки
-
-              // 3. Кнопка
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
-                child: GestureDetector(
-                  onTap: () => addToCartItem(userId, shopId, dish, context: context),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: added ? Colors.black : Colors.deepOrange,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: added ? [] : [BoxShadow(color: Colors.deepOrange.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
-                    ),
-                    child: Center(
-                      child: Text(
-                          added ? "В КОРЗИНЕ" : "КУПИТЬ",
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)
-                      ),
-                    ),
-                  ),
-                ),
-              )
-            ],
+            ),
           ),
         );
       },
@@ -400,14 +597,28 @@ class PharmacyItemCard extends StatelessWidget {
   }
 }
 
+/// Иконка счетчика товаров в корзине
 Widget PositionByRelative(String count) {
   return Positioned(
-    right: 4, top: 10,
+    right: 6,
+    top: 8,
     child: Container(
       padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(color: Colors.deepOrange, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
+      decoration: BoxDecoration(
+        color: const Color(0xFF6366F1),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2),
+      ),
       constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-      child: Text(count, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+      child: Text(
+        count,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+        ),
+        textAlign: TextAlign.center,
+      ),
     ),
   );
 }
