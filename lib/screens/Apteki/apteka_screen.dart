@@ -12,6 +12,13 @@ class AptekaScreen extends StatefulWidget {
 class _AptekaScreenState extends State<AptekaScreen> {
   // Переменная для текста поиска
   String searchQuery = "";
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +57,7 @@ class _AptekaScreenState extends State<AptekaScreen> {
                 ],
               ),
               child: TextField(
+                controller: _searchController,
                 onChanged: (value) {
                   setState(() {
                     searchQuery = value.toLowerCase();
@@ -60,14 +68,24 @@ class _AptekaScreenState extends State<AptekaScreen> {
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
                 ),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Найти аптеку...',
                   hintStyle:
-                  TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
-                  prefixIcon: Icon(Icons.search_rounded,
+                  const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+                  prefixIcon: const Icon(Icons.search_rounded,
                       color: Color(0xFF64748B), size: 22),
+                  suffixIcon: searchQuery.isNotEmpty
+                      ? IconButton(
+                    icon: const Icon(Icons.cancel_rounded,
+                        color: Color(0xFF94A3B8), size: 20),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() => searchQuery = "");
+                    },
+                  )
+                      : null,
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 14),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
                 ),
               ),
             ),
@@ -79,6 +97,7 @@ class _AptekaScreenState extends State<AptekaScreen> {
               stream: FirebaseFirestore.instance
                   .collection('categories')
                   .where('category', isEqualTo: 'apteka')
+                  .where('isActive', isEqualTo: true)
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {

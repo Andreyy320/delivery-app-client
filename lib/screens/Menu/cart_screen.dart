@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'Cart_data.dart';
-import '../../models/cart_item.dart' hide CartItem;
-import '../../models/cart_item.dart' as model;
+import '../../models/cart_item.dart';
 import 'checkout_screen.dart';
 
 class CartScreen extends StatelessWidget {
@@ -42,6 +41,8 @@ class CartScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(
           restaurantName ?? 'Ваша корзина',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: Color(0xFF0F172A),
             fontWeight: FontWeight.w900,
@@ -60,47 +61,52 @@ class CartScreen extends StatelessWidget {
         builder: (context, cart, _) {
           if (cart.isEmpty) {
             return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF0F172A).withOpacity(0.04),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
-                        )
-                      ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF0F172A).withOpacity(0.04),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          )
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.shopping_bag_outlined,
+                        size: 64,
+                        color: Color(0xFF94A3B8),
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.shopping_bag_outlined,
-                      size: 64,
-                      color: Color(0xFF94A3B8),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'В корзине пока пусто',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Color(0xFF0F172A),
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'В корзине пока пусто',
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Color(0xFF0F172A),
-                      fontWeight: FontWeight.w800,
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Выберите товары из каталога',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Выберите вкусные блюда из меню',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF64748B),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           }
@@ -144,7 +150,6 @@ class CartScreen extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // КАРТИНКА БЛЮДА
           Container(
             width: 75,
             height: 75,
@@ -154,12 +159,13 @@ class CartScreen extends StatelessWidget {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
-              child: item.dish.imagePath.startsWith('http')
+              child: item.dish.imagePath.isNotEmpty
+                  ? (item.dish.imagePath.startsWith('http')
                   ? Image.network(
                 item.dish.imagePath,
                 fit: BoxFit.cover,
                 errorBuilder: (c, e, s) => const Icon(
-                  Icons.restaurant_rounded,
+                  Icons.shopping_bag_rounded,
                   color: Color(0xFF94A3B8),
                 ),
               )
@@ -167,15 +173,17 @@ class CartScreen extends StatelessWidget {
                 item.dish.imagePath,
                 fit: BoxFit.cover,
                 errorBuilder: (c, e, s) => const Icon(
-                  Icons.restaurant_rounded,
+                  Icons.shopping_bag_rounded,
                   color: Color(0xFF94A3B8),
                 ),
+              ))
+                  : const Icon(
+                Icons.shopping_bag_rounded,
+                color: Color(0xFF94A3B8),
               ),
             ),
           ),
           const SizedBox(width: 12),
-
-          // НАЗВАНИЕ И ЦЕНА
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -199,12 +207,13 @@ class CartScreen extends StatelessWidget {
                     fontWeight: FontWeight.w900,
                     fontSize: 15,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-
-          // ГОРИЗОНТАЛЬНЫЙ СЧЁТЧИК (+ / - / delete)
+          const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
@@ -228,7 +237,7 @@ class CartScreen extends StatelessWidget {
                   onTap: () => removeFromCart(userId, item.shopId, item),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Text(
                     '${item.quantity}',
                     style: const TextStyle(
@@ -254,6 +263,10 @@ class CartScreen extends StatelessWidget {
 
   Widget _buildBottomSummary(
       BuildContext context, String userId, List<CartItem> cart) {
+    final currentShopId = shopId ?? (cart.isNotEmpty ? cart.first.shopId : '');
+    final currentRestaurantName = restaurantName ?? 'Заказ из заведения';
+    final double currentTotal = getCartTotal(userId, shopId);
+
     return SafeArea(
       bottom: true,
       child: Container(
@@ -283,13 +296,17 @@ class CartScreen extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                Text(
-                  '${getCartTotal(userId, shopId).toInt()} Руб',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF0F172A),
-                    letterSpacing: -0.5,
+                Flexible(
+                  child: Text(
+                    '${currentTotal.toInt()} Руб',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF0F172A),
+                      letterSpacing: -0.5,
+                    ),
                   ),
                 ),
               ],
@@ -297,7 +314,6 @@ class CartScreen extends StatelessWidget {
             const SizedBox(height: 14),
             Row(
               children: [
-                // КНОПКА ОЧИСТКИ
                 Container(
                   height: 52,
                   width: 52,
@@ -316,8 +332,6 @@ class CartScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
-
-                // КНОПКА ОФОРМЛЕНИЯ
                 Expanded(
                   child: Container(
                     height: 52,
@@ -342,8 +356,8 @@ class CartScreen extends StatelessWidget {
                           context,
                           MaterialPageRoute(
                             builder: (_) => CheckoutScreen(
-                              shopId: shopId ?? 'combined',
-                              restaurantName: restaurantName ?? 'Общий заказ',
+                              shopId: currentShopId,
+                              restaurantName: currentRestaurantName,
                             ),
                           ),
                         );
@@ -358,12 +372,16 @@ class CartScreen extends StatelessWidget {
                       child: const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(
-                            'Оформить заказ',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
+                          Flexible(
+                            child: Text(
+                              'Оформить заказ',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                           SizedBox(width: 8),
@@ -394,11 +412,11 @@ class CartScreen extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 32,
-        height: 32,
+        width: 30,
+        height: 30,
         decoration: BoxDecoration(
           color: bgColor,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(9),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.04),
@@ -406,7 +424,7 @@ class CartScreen extends StatelessWidget {
             ),
           ],
         ),
-        child: Icon(icon, size: 18, color: color),
+        child: Icon(icon, size: 16, color: color),
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:latlong2/latlong.dart';
 import '../screens/Menu/Cart_data.dart';
@@ -10,12 +11,13 @@ class Order {
   final String comment;
   final String paymentMethod;
   final double total;
-  final double deliveryPrice; // 🔹 НОВОЕ: Стоимость доставки
+  final double deliveryPrice;
   final DateTime dateTime;
   final String status;
   final String? shopId;
   final String? restaurantName;
   final String type;
+  final List<Map<String, dynamic>>? replacements; // 🔹 НОВОЕ: Поле для замен
 
   final String? courierId;
 
@@ -35,10 +37,11 @@ class Order {
     required this.comment,
     required this.paymentMethod,
     required this.total,
-    required this.deliveryPrice, // 🔹 Добавляем в конструктор
+    required this.deliveryPrice,
     required this.dateTime,
     required this.status,
     required this.type,
+    this.replacements, // 🔹 Добавляем в конструктор
     this.courierId,
     this.shopId,
     this.restaurantName,
@@ -67,10 +70,11 @@ class Order {
     'comment': comment,
     'paymentMethod': paymentMethod,
     'total': total,
-    'deliveryPrice': deliveryPrice, // 🔹 Сохраняем стоимость доставки
+    'deliveryPrice': deliveryPrice,
     'dateTime': dateTime.toIso8601String(),
     'status': status,
     'type': type,
+    'replacements': replacements, // 🔹 Сохраняем замены
     'courierId': courierId,
     'shopId': shopId,
     'restaurantName': restaurantName,
@@ -100,10 +104,13 @@ class Order {
       comment: json['comment'],
       paymentMethod: json['paymentMethod'],
       total: (json['total'] as num).toDouble(),
-      deliveryPrice: (json['deliveryPrice'] as num? ?? 0.0).toDouble(), // 🔹 Читаем цену доставки
+      deliveryPrice: (json['deliveryPrice'] as num? ?? 0.0).toDouble(),
       dateTime: DateTime.parse(json['dateTime']),
       status: json['status'] ?? 'preparing',
       type: json['category'] ?? 'restaurant',
+      replacements: json['replacements'] != null
+          ? List<Map<String, dynamic>>.from(json['replacements'])
+          : null, // 🔹 Читаем замены из JSON
       courierId: json['courierId'],
       shopId: json['shopId'],
       restaurantName: json['restaurantName'],
@@ -147,10 +154,13 @@ class Order {
       comment: data['comment'] ?? '',
       paymentMethod: data['paymentMethod'] ?? 'online',
       total: (data['total'] as num).toDouble(),
-      deliveryPrice: (data['deliveryPrice'] as num? ?? 0.0).toDouble(), // 🔹 Читаем цену доставки из Firestore
+      deliveryPrice: (data['deliveryPrice'] as num? ?? 0.0).toDouble(),
       dateTime: date,
       status: data['status'] ?? 'preparing',
       type: data['category'] ?? 'restaurant',
+      replacements: data['replacements'] != null
+          ? List<Map<String, dynamic>>.from(data['replacements'])
+          : null, // 🔹 Читаем замены из Firestore
       courierId: data['courierId'],
       shopId: data['shopId'],
       restaurantName: data['restaurantName'],

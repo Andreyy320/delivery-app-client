@@ -25,6 +25,7 @@ class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   DateTime? _appStartTime;
   StreamSubscription<User?>? _authSubscription;
+  bool _isDialogShowing = false;
 
   final List<GlobalKey<NavigatorState>> _navigatorKeys =
   List.generate(4, (_) => GlobalKey<NavigatorState>());
@@ -95,14 +96,18 @@ class _MainScreenState extends State<MainScreen> {
         final status = (data['status'] ?? '').toString();
         Timestamp? timestamp = data['createdAt'] as Timestamp?;
 
-        if (timestamp != null) {
-          DateTime orderTime = timestamp.toDate();
-          if (_appStartTime != null && orderTime.isBefore(_appStartTime!)) {
-            _globalProcessedOrders[orderId] = status;
+        // ИЗМЕНЕНИЕ: Если статус требует действия, мы не должны его пропускать,
+        // даже если заказ был создан до запуска приложения!
+        if (change.type == DocumentChangeType.added && status != 'action_required') {
+          if (timestamp != null) {
+            DateTime orderTime = timestamp.toDate();
+            if (_appStartTime != null && orderTime.isBefore(_appStartTime!)) {
+              _globalProcessedOrders[orderId] = status;
+              continue;
+            }
+          } else {
             continue;
           }
-        } else if (change.type == DocumentChangeType.added) {
-          continue;
         }
 
         if (_globalProcessedOrders[orderId] == status) continue;
@@ -110,12 +115,25 @@ class _MainScreenState extends State<MainScreen> {
         if (change.type == DocumentChangeType.modified ||
             change.type == DocumentChangeType.added) {
           _globalProcessedOrders[orderId] = status;
-          _triggerNotification(status);
+
+          // Триггерим уведомление (можно оставить или убрать, если шторки достаточно)
+          if (status != 'action_required') {
+            _triggerNotification(status);
+          }
+
+          // Показ шторки замены
+          if (status == 'action_required' && !_isDialogShowing) {
+            _isDialogShowing = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _showReplacementBottomSheet(change.doc);
+              }
+            });
+          }
         }
       }
     });
   }
-
   void _triggerNotification(String status) {
     final Map<String, List<String>> notifications = {
       'new': ["Заказ создан 📝", "Заказ успешно оформлен."],
@@ -126,12 +144,389 @@ class _MainScreenState extends State<MainScreen> {
       'inProgress': ["В пути 🛵", "Курьер скоро будет!"],
       'delivered': ["Доставлен ✨", "Приятного аппетита!"],
       'cancelled': ["Отменен ❌", "Заказ был отменен."],
+      'action_required': ["Требуется действие ⚠️", "Заведение предлагает замену товара."],
     };
 
     if (notifications.containsKey(status)) {
       NotificationService.showNotification(
           notifications[status]![0], notifications[status]![1]);
     }
+  }
+
+  /// Карточка отображения конкретной замены без красного крестика (только фото)
+  Widget _buildItemReplacementCard({
+    required String oldName,
+    required String newName,
+    String? oldImage,
+    String? newImage,
+    num? oldPrice,
+    num? newPrice,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        children: [
+          // Нет в наличии - выводим фото товара
+          Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: (oldImage != null && oldImage.isNotEmpty)
+                    ? Image.network(
+                  oldImage,
+                  width: 44,
+                  height: 44,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    width: 44,
+                    height: 44,
+                    color: Colors.grey.shade200,
+                    child: const Icon(Icons.fastfood, size: 24, color: Colors.grey),
+                  ),
+                )
+                    : Container(
+                  width: 44,
+                  height: 44,
+                  color: Colors.grey.shade200,
+                  child: const Icon(Icons.fastfood, size: 24, color: Colors.grey),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Закончился:',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600], fontWeight: FontWeight.w500),
+                    ),
+                    Text(
+                      oldName,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey,
+                        decoration: TextDecoration.lineThrough,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (oldPrice != null)
+                Text(
+                  '${oldPrice.toInt()} ₽',
+                  style: const TextStyle(color: Colors.grey),
+                ),
+            ],
+          ),
+
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Expanded(child: Divider(color: Color(0xFFE2E8F0))),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8),
+                  child: Icon(Icons.arrow_downward_rounded, color: Colors.deepOrange, size: 20),
+                ),
+                Expanded(child: Divider(color: Color(0xFFE2E8F0))),
+              ],
+            ),
+          ),
+
+          // Предлагаемая замена - выводим фото товара
+          Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: (newImage != null && newImage.isNotEmpty)
+                    ? Image.network(
+                  newImage,
+                  width: 44,
+                  height: 44,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    width: 44,
+                    height: 44,
+                    color: Colors.orange.shade50,
+                    child: const Icon(Icons.fastfood, size: 24, color: Colors.deepOrange),
+                  ),
+                )
+                    : Container(
+                  width: 44,
+                  height: 44,
+                  color: Colors.orange.shade50,
+                  child: const Icon(Icons.fastfood, size: 24, color: Colors.deepOrange),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Предлагаем взамен:',
+                      style: TextStyle(fontSize: 11, color: Colors.deepOrange, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      newName,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (newPrice != null)
+                Text(
+                  '${newPrice.toInt()} ₽',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A)),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Крупный выезжающий снизу блок предложения замены товара
+  void _showReplacementBottomSheet(DocumentSnapshot orderDoc) {
+    final data = orderDoc.data() as Map<String, dynamic>? ?? {};
+
+    // Парсим данные замены из различных вариантов структуры в БД
+    List<Map<String, dynamic>> replacementItems = [];
+
+    if (data.containsKey('replacements') && data['replacements'] is List) {
+      replacementItems = List<Map<String, dynamic>>.from(data['replacements']);
+    } else if (data.containsKey('replacement') && data['replacement'] is Map) {
+      replacementItems.add(Map<String, dynamic>.from(data['replacement']));
+    } else {
+      // Фолбэк парсинга
+      replacementItems.add({
+        'oldItemName': data['oldItemName'] ?? data['outOfStockItem'] ?? 'Товар',
+        'newItemName': data['newItemName'] ?? data['replacementItem'] ?? 'Альтернативный товар',
+        'oldItemImage': data['oldItemImage'] ?? data['oldImage'],
+        'newItemImage': data['newItemImage'] ?? data['newImage'],
+        'oldPrice': data['oldPrice'],
+        'newPrice': data['newPrice'],
+        'oldQuantity': data['oldQuantity'] ?? 1,
+        'newQuantity': data['newQuantity'] ?? 1,
+      });
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.published_with_changes_rounded,
+                      color: Colors.deepOrange,
+                      size: 36,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Замена товара в заказе',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'К сожалению, некоторых позиций нет в наличии. Заведение предлагает следующую замену:',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Выводим список заменяемых позиций
+                  ...replacementItems.map((item) {
+                    return _buildItemReplacementCard(
+                      oldName: item['oldItemName'] ?? item['oldName'] ?? 'Товар',
+                      newName: item['newItemName'] ?? item['newItemName'] ?? 'Замена',
+                      oldImage: item['oldItemImage'] ?? item['oldImage'],
+                      newImage: item['newItemImage'] ?? item['newImage'],
+                      oldPrice: item['oldPrice'],
+                      newPrice: item['newPrice'],
+                    );
+                  }),
+
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            side: const BorderSide(color: Colors.redAccent),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          onPressed: () async {
+                            Navigator.pop(sheetContext);
+                            await orderDoc.reference.update({
+                              'status': 'cancelled',
+                              'cancelReason': 'Отказ от замены',
+                            });
+                          },
+                          child: const Text(
+                            'Отменить заказ',
+                            style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.deepOrange,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+
+
+
+                          onPressed: () async {
+                            Navigator.pop(sheetContext);
+
+                            // 1. Берем текущие товары из заказа
+                            List<Map<String, dynamic>> currentItems = List.from(
+                              (data['items'] ?? []).map((item) => Map<String, dynamic>.from(item)),
+                            );
+
+                            // 2. Обрабатываем актуальную замену из списка
+                            if (replacementItems.isNotEmpty) {
+                              for (var replacement in replacementItems) {
+                                // Собираем все возможные варианты названий старого товара для надежного удаления
+                                final possibleOldNames = [
+                                  replacement['oldItemName'],
+                                  replacement['oldName'],
+                                  replacement['old'],
+                                ].where((n) => n != null).map((n) => n.toString().trim().toLowerCase()).toList();
+
+                                // УДАЛЯЕМ ВСЕ совпадения со старым товаром из списка
+                                if (possibleOldNames.isNotEmpty) {
+                                  currentItems.removeWhere((item) {
+                                    final itemName = (item['name'] ?? '').toString().trim().toLowerCase();
+                                    return possibleOldNames.contains(itemName);
+                                  });
+                                }
+
+                                // Добавляем новый товар
+                                final newName = (replacement['newItemName'] ?? replacement['newName'] ?? '').toString().trim();
+                                final newPrice = replacement['newPrice'] ?? 0;
+                                final newImage = replacement['newItemImage'] ?? replacement['newImage'] ?? '';
+                                final newQtyToAdd = (replacement['newQuantity'] ?? 1) as int;
+
+                                if (newName.isNotEmpty) {
+                                  // Проверяем, есть ли уже такой новый товар в списке
+                                  final existingIndex = currentItems.indexWhere((item) {
+                                    final itemName = (item['name'] ?? '').toString().trim().toLowerCase();
+                                    return itemName == newName.toLowerCase();
+                                  });
+
+                                  if (existingIndex != -1) {
+                                    // Если есть — просто увеличиваем количество, чтобы не плодить дубликаты
+                                    int existingQty = (currentItems[existingIndex]['quantity'] ?? 1) as int;
+                                    currentItems[existingIndex]['quantity'] = existingQty + newQtyToAdd;
+                                  } else {
+                                    // Если нет — добавляем ровно 1 раз
+                                    currentItems.add({
+                                      'name': newName,
+                                      'price': newPrice,
+                                      'quantity': newQtyToAdd,
+                                      'imagePath': newImage,
+                                    });
+                                  }
+                                }
+                              }
+                            }
+
+                            // 3. Пересчитываем общую стоимость товаров
+                            num newItemsPrice = 0;
+                            for (var item in currentItems) {
+                              final price = (item['price'] ?? 0) as num;
+                              final qty = (item['quantity'] ?? 1) as int;
+                              newItemsPrice += price * qty;
+                            }
+
+                            final deliveryPrice = (data['deliveryPrice'] ?? data['deliveryCost'] ?? 0) as num;
+                            final newTotal = newItemsPrice + deliveryPrice;
+
+                            // 4. Обновляем документ в Firestore
+                            await orderDoc.reference.update({
+                              'status': 'zamena',
+                              'replacementAccepted': true,
+                              'items': currentItems,
+                              'itemsPrice': newItemsPrice,
+                              'totalPrice': newItemsPrice,
+                              'total': newTotal,
+                              'updatedAt': FieldValue.serverTimestamp(),
+                            });
+                          },
+                          child: const Text(
+                            'Принять замену',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    ).then((_) {
+      _isDialogShowing = false;
+    });
   }
 
   @override
@@ -146,7 +541,7 @@ class _MainScreenState extends State<MainScreen> {
         }
       },
       child: Scaffold(
-        extendBody: true, // Позволяет контенту заходить под парящий навигатор
+        extendBody: true,
         body: IndexedStack(
           index: _currentIndex,
           children: [
@@ -174,7 +569,6 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  /// Премиальный парящий Bottom Navigation Bar
   Widget _buildCustomFloatingNavBar(bool isLoggedIn) {
     final items = [
       _NavBarItemData(activeIcon: Icons.home_rounded, inactiveIcon: Icons.home_outlined, label: 'Главная'),
@@ -194,7 +588,6 @@ class _MainScreenState extends State<MainScreen> {
           width: 1.5,
         ),
         boxShadow: [
-          // Глубокая объёмная тень
           BoxShadow(
             color: const Color(0xFF0F172A).withOpacity(0.12),
             blurRadius: 30,
@@ -283,7 +676,6 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  /// Премиальный диалог авторизации
   void _showAuthRequired(BuildContext context) {
     showDialog(
       context: context,
@@ -308,18 +700,17 @@ class _MainScreenState extends State<MainScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 3D иконка замочка
               Container(
                 width: 70,
                 height: 70,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: LinearGradient(
+                  gradient: const LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      const Color(0xFF6366F1),
-                      const Color(0xFF4F46E5),
+                      Color(0xFF6366F1),
+                      Color(0xFF4F46E5),
                     ],
                   ),
                   boxShadow: [
@@ -347,14 +738,14 @@ class _MainScreenState extends State<MainScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-              Text(
+              const Text(
                 'Чтобы отслеживать статус доставки и видеть историю заказов, войдите в свой профиль.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
                   height: 1.4,
                   fontWeight: FontWeight.w500,
-                  color: const Color(0xFF64748B),
+                  color: Color(0xFF64748B),
                 ),
               ),
               const SizedBox(height: 24),

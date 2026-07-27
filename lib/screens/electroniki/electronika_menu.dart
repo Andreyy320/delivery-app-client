@@ -11,6 +11,13 @@ class ElectronikaScreen extends StatefulWidget {
 
 class _ElectronikaScreenState extends State<ElectronikaScreen> {
   String searchQuery = "";
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +56,7 @@ class _ElectronikaScreenState extends State<ElectronikaScreen> {
                 ],
               ),
               child: TextField(
+                controller: _searchController,
                 onChanged: (value) {
                   setState(() {
                     searchQuery = value.toLowerCase();
@@ -59,14 +67,24 @@ class _ElectronikaScreenState extends State<ElectronikaScreen> {
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
                 ),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Поиск магазинов...',
                   hintStyle:
-                  TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
-                  prefixIcon: Icon(Icons.search_rounded,
+                  const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+                  prefixIcon: const Icon(Icons.search_rounded,
                       color: Color(0xFF64748B), size: 22),
+                  suffixIcon: searchQuery.isNotEmpty
+                      ? IconButton(
+                    icon: const Icon(Icons.cancel_rounded,
+                        color: Color(0xFF94A3B8), size: 20),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() => searchQuery = "");
+                    },
+                  )
+                      : null,
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 14),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
                 ),
               ),
             ),
@@ -78,6 +96,7 @@ class _ElectronikaScreenState extends State<ElectronikaScreen> {
               stream: FirebaseFirestore.instance
                   .collection('categories')
                   .where('category', isEqualTo: 'electronika')
+                  .where('isActive', isEqualTo: true)
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
@@ -112,8 +131,8 @@ class _ElectronikaScreenState extends State<ElectronikaScreen> {
                       children: [
                         Container(
                           padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF1F5F9),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFF1F5F9),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(

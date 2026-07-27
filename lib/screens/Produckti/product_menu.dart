@@ -113,6 +113,7 @@ class _ProductScreenState extends State<ProductScreen> {
               stream: FirebaseFirestore.instance
                   .collection('categories')
                   .where('category', isEqualTo: 'product')
+                  .where('isActive', isEqualTo: true)
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {

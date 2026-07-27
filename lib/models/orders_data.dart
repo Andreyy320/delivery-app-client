@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/cupertino.dart';
 import '../screens/Menu/Cart_data.dart';
 import '../models/dish_model.dart';
 import '../screens/register_and_vhod/notification_service.dart';
@@ -28,7 +29,7 @@ class OrdersService {
             message = "Заказ в пути! Курьер уже мчится к вам 🏎️";
           } else if (status == 'completed') {
             message = "Доставлено! Приятного аппетита 🍕";
-          } else if (status == 'delivered') { // Исправлено: обычно 'delivered' это доставлено, но оставляю твою логику отмены если так в базе
+          } else if (status == 'delivered') {
             title = "Заказ отменен";
             message = "К сожалению, ресторан отменил заказ 😔";
           }
@@ -41,6 +42,27 @@ class OrdersService {
     });
   }
 
+
+
+  static double calculateTaxiPrice({required double distanceKm, required int durationMin}) {
+    const double baseFee = 15.0;
+    const double ratePerKm = 5.85;
+    const double idleRatePerHour = 60.0;
+
+    double distanceCost = baseFee + (distanceKm * ratePerKm);
+    double timeCost = (durationMin / 60.0) * idleRatePerHour;
+    double rawPrice = distanceCost + timeCost;
+
+    debugPrint('--- РАСЧЕТ ЦЕНЫ ---');
+    debugPrint('Дистанция: $distanceKm км -> Стоимость км: $distanceCost');
+    debugPrint('Время: $durationMin мин -> Стоимость времени: $timeCost');
+    debugPrint('Итого «сырая» цена: $rawPrice');
+    debugPrint('Итого с округлением: ${rawPrice.round()}');
+
+    return rawPrice;
+  }
+
+
   // Добавление заказа
   static Future<void> addOrder(
       String userId,
@@ -48,19 +70,30 @@ class OrdersService {
         required String restaurantName,
         required String shopId,
         required String category,
-        String comment = '', // Это комментарий курьеру
+        String comment = '', // Комментарий курьеру
         String restaurantComment = '', // Комментарий для заведения
         String paymentMethod = 'cash',
         double? lat,
         double? lng,
-        // 🔹 НОВОЕ: Принимаем три цены для прозрачности
+        String? address, // Название улицы/адреса доставки
         double itemsPrice = 0.0,    // Сумма товаров (для заведения)
         double deliveryPrice = 0.0, // Сумма доставки (для курьера)
         double totalPrice = 0.0,    // Общая сумма (для клиента)
+        double distanceKm = 0.0,    // 🔹 НОВОЕ: Расстояние в км
+        int durationMin = 0,        // 🔹 НОВОЕ: Время в пути в минутах
       }) async {
     final userDoc = await _firestore.collection('users').doc(userId).get();
     final clientName = userDoc.data()?['name'] ?? 'Без имени';
     final clientPhone = userDoc.data()?['phone'] ?? '';
+
+    // Если итоговая цена не передана при вызове, считаем её автоматически по формуле таксометра!
+    final double finalDeliveryPrice = deliveryPrice > 0
+        ? deliveryPrice
+        : calculateTaxiPrice(distanceKm: distanceKm, durationMin: durationMin);
+
+    final double finalTotal = totalPrice > 0
+        ? totalPrice
+        : (itemsPrice + finalDeliveryPrice);
 
     final orderData = {
       'userId': userId,
@@ -76,10 +109,11 @@ class OrdersService {
         'imagePath': item.dish.imagePath,
       }).toList(),
 
-      // 🔹 ТРИ ЦЕНЫ: Теперь в базе будет полный порядок
-      'itemsPrice': itemsPrice,       // Чистая выручка заведения
-      'deliveryPrice': deliveryPrice, // Чистая выручка курьера
-      'total': totalPrice,            // Сколько всего заплатил клиент
+      'itemsPrice': itemsPrice,
+      'deliveryPrice': finalDeliveryPrice, // 🔹 Записываем рассчитанную по формуле цену
+      'total': finalTotal,                 // 🔹 Общая сумма с учетом товаров и доставки
+      'distance_km': distanceKm,           // 🔹 Сохраняем километраж для карточки курьера
+      'duration_min': durationMin,         // 🔹 Сохраняем время в пути
 
       'paymentMethod': paymentMethod,
       'comment': comment,
@@ -90,6 +124,13 @@ class OrdersService {
       'clientPhone': clientPhone,
       'clientLat': lat,
       'clientLng': lng,
+      'clientAddress': address ?? 'Точка доставки',
+
+      // Дублируем структуру location, чтобы модель Order.fromFirestore читала её без ошибок
+      'deliveryLocation': {
+        'lat': lat ?? 0.0,
+        'lng': lng ?? 0.0,
+      },
     };
 
     // Сохраняем в коллекцию заказов пользователя

@@ -1,15 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'restaurant_menu_screen.dart';
+import 'package:untitled1/screens/stroimaterial/stroimaterial_menu.dart';
 
-class FoodRestaurantsScreen extends StatefulWidget {
-  const FoodRestaurantsScreen({super.key});
+class StroiMaterialScreen extends StatefulWidget {
+  const StroiMaterialScreen({super.key});
 
   @override
-  State<FoodRestaurantsScreen> createState() => _FoodRestaurantsScreenState();
+  State<StroiMaterialScreen> createState() => _StroiMaterialScreenState();
 }
 
-class _FoodRestaurantsScreenState extends State<FoodRestaurantsScreen> {
+class _StroiMaterialScreenState extends State<StroiMaterialScreen> {
   String searchQuery = "";
   final TextEditingController _searchController = TextEditingController();
 
@@ -25,7 +25,7 @@ class _FoodRestaurantsScreenState extends State<FoodRestaurantsScreen> {
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: const Text(
-          'Рестораны',
+          'Стройматериалы',
           style: TextStyle(
             fontWeight: FontWeight.w900,
             fontSize: 22,
@@ -68,7 +68,7 @@ class _FoodRestaurantsScreenState extends State<FoodRestaurantsScreen> {
                   fontSize: 15,
                 ),
                 decoration: InputDecoration(
-                  hintText: 'Найти ресторан...',
+                  hintText: 'Найти строительный магазин...',
                   hintStyle: const TextStyle(
                     color: Color(0xFF94A3B8),
                     fontSize: 14,
@@ -112,7 +112,7 @@ class _FoodRestaurantsScreenState extends State<FoodRestaurantsScreen> {
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('categories')
-                  .where('category', isEqualTo: 'restaurant')
+                  .where('category', isEqualTo: 'stroimaterial')
                   .where('isActive', isEqualTo: true)
                   .snapshots(),
               builder: (context, snapshot) {
@@ -161,7 +161,7 @@ class _FoodRestaurantsScreenState extends State<FoodRestaurantsScreen> {
                         const SizedBox(height: 16),
                         Text(
                           searchQuery.isEmpty
-                              ? 'Рестораны пока не добавлены'
+                              ? 'Магазины пока не добавлены'
                               : 'Ничего не найдено',
                           style: const TextStyle(
                             color: Color(0xFF0F172A),
@@ -193,17 +193,17 @@ class _FoodRestaurantsScreenState extends State<FoodRestaurantsScreen> {
                     final String docId = docs[index].id;
                     final String? logoUrl = data['logoUrl'];
 
-                    return _RestaurantCard(
+                    return _StroiMaterialStoreCard(
                       name: data['name'] ?? 'Без названия',
                       description: data['description'],
                       logoUrl: logoUrl,
                       rating: data['rating']?.toString() ?? '5.0',
-                      time: data['time'] ?? '9:00 - 23:00',
+                      time: data['time'] ?? '9:00 - 21:00',
                       onTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => RestaurantMenuScreen(
+                            builder: (_) => StroimaterialMenuScreen(
                               restaurantName: data['name'] ?? 'Без названия',
                               shopId: docId,
                             ),
@@ -222,8 +222,8 @@ class _FoodRestaurantsScreenState extends State<FoodRestaurantsScreen> {
   }
 }
 
-/// Анимированная карточка ресторана
-class _RestaurantCard extends StatefulWidget {
+/// Анимированная карточка строительного магазина
+class _StroiMaterialStoreCard extends StatefulWidget {
   final String name;
   final String? description;
   final String? logoUrl;
@@ -231,7 +231,7 @@ class _RestaurantCard extends StatefulWidget {
   final String time;
   final VoidCallback onTap;
 
-  const _RestaurantCard({
+  const _StroiMaterialStoreCard({
     required this.name,
     this.description,
     this.logoUrl,
@@ -241,10 +241,10 @@ class _RestaurantCard extends StatefulWidget {
   });
 
   @override
-  State<_RestaurantCard> createState() => _RestaurantCardState();
+  State<_StroiMaterialStoreCard> createState() => _StroiMaterialStoreCardState();
 }
 
-class _RestaurantCardState extends State<_RestaurantCard> {
+class _StroiMaterialStoreCardState extends State<_StroiMaterialStoreCard> {
   bool _pressed = false;
 
   @override
@@ -276,7 +276,7 @@ class _RestaurantCardState extends State<_RestaurantCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ИЗОБРАЖЕНИЕ РЕСТОРАНА
+                // ИЗОБРАЖЕНИЕ МАГАЗИНА
                 Stack(
                   children: [
                     ClipRRect(
@@ -318,7 +318,7 @@ class _RestaurantCardState extends State<_RestaurantCard> {
                         width: double.infinity,
                         color: const Color(0xFFF1F5F9),
                         child: const Icon(
-                          Icons.restaurant_rounded,
+                          Icons.build_rounded, // Подходящая иконка для стройматериалов
                           color: Color(0xFF94A3B8),
                           size: 44,
                         ),
@@ -381,7 +381,7 @@ class _RestaurantCardState extends State<_RestaurantCard> {
                   ],
                 ),
 
-                // ИНФОРМАЦИЯ О РЕСТОРАНЕ
+                // ИНФОРМАЦИЯ О МАГАЗИНЕ
                 Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
@@ -412,7 +412,7 @@ class _RestaurantCardState extends State<_RestaurantCard> {
                         ),
                       ],
                       const SizedBox(height: 16),
-                      // Твое время работы из базы
+                      // Время работы из базы
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 6),

@@ -3,8 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
 import '../../models/order_model.dart';
 import '../Dostavka/DeliveryOrder.dart';
-import '../Dostavka/gorod_model.dart';
-import '../Dostavka/mejgorod_model.dart';
+import '../../NO_USED_SCREEN/gorod_model.dart';
+import '../../NO_USED_SCREEN/mejgorod_model.dart';
 import 'package:intl/intl.dart';
 
 class OrdersStatusScreen extends StatefulWidget {
@@ -64,6 +64,7 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
 
   String _translateStatus(String status) {
     switch (status.toLowerCase()) {
+      case 'pending': return 'Ожидание';
       case 'new': return 'Новый';
       case 'accepted': return 'Принят';
       case 'preparing': return 'Готовится';
@@ -346,8 +347,11 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
     ];
     final labels = ['Новый', 'Принят', 'Везем', 'Готово'];
 
+    final pickupText = order.pickupAddress ?? 'Адрес отправления не указан';
+    final dropoffText = order.dropoffAddress ?? 'Адрес назначения не указан';
+
     return _baseCard(
-      title: 'Срочная доставка',
+      title: 'Индивидуальная доставка',
       date: order.createdAt,
       status: isCancelled ? 'Отменен' : _translateStatus(order.status),
       color: isCancelled ? const Color(0xFFEF4444) : const Color(0xFF2563EB),
@@ -355,9 +359,9 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _locationRow(Icons.radio_button_checked_rounded, 'Откуда', const Color(0xFF2563EB)),
+          _locationRow(Icons.radio_button_checked_rounded, pickupText, const Color(0xFF2563EB)),
           const SizedBox(height: 6),
-          _locationRow(Icons.location_on_rounded, 'Куда', const Color(0xFFEF4444)),
+          _locationRow(Icons.location_on_rounded, dropoffText, const Color(0xFFEF4444)),
           const SizedBox(height: 8),
           isCancelled ? _buildCancelledWidget() : _buildProgressBar(steps, icons, labels, const Color(0xFF2563EB)),
           Row(
@@ -498,14 +502,12 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
         borderRadius: BorderRadius.circular(28),
         border: Border.all(color: Colors.white, width: 2),
         boxShadow: [
-          // Основная глубокая 3D тень
           BoxShadow(
             color: const Color(0xFF0F172A).withOpacity(0.08),
             blurRadius: 24,
             spreadRadius: 0,
             offset: const Offset(0, 12),
           ),
-          // Верхний блик для эффекта выпуклости
           BoxShadow(
             color: Colors.white.withOpacity(0.8),
             blurRadius: 6,

@@ -11,6 +11,9 @@ plugins {
 android {
     namespace = "com.example.untitled1"
     compileSdk = flutter.compileSdkVersion
+
+    // Явно фиксируем версии, чтобы Gradle не качал ничего лишнего
+    buildToolsVersion = "34.0.0"
     ndkVersion = "27.0.12077973"
 
     compileOptions {
@@ -28,9 +31,8 @@ android {
     defaultConfig {
         applicationId = "com.example.untitled1"
 
-        // Исправленные названия:
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion // Было flutter.targetSdk (ошибка тут)
+        targetSdk = flutter.targetSdkVersion
 
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -48,9 +50,9 @@ android {
 }
 
 dependencies {
-    // Эта библиотека исправляет твою ошибку FAILURE: Build failed
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
 }
+
 flutter {
     source = "../.."
 }

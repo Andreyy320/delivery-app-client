@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
@@ -5,6 +6,21 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../models/dish_model.dart';
+import '../../models/orders_data.dart';
+import '../Menu/Cart_data.dart';
+import '../../models/order_model.dart';
+
+
+import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../models/dish_model.dart';
 import '../../models/orders_data.dart';
 import '../Menu/Cart_data.dart';
 import '../../models/order_model.dart';
@@ -29,11 +45,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final MapController _mapController = MapController();
 
   LatLng? _deliveryLocation;
+  String? _deliveryAddressName; // Название улицы/адреса для отображения
   LatLng? _restaurantLocation;
   List<LatLng> _routePoints = [];
   double _deliveryPrice = 0.0;
   int _estimatedMinutes = 0;
+  double _roadDistanceKm = 0.0; // 🔹 Храним точное расстояние в км для вывода
   bool _isLoadingRoute = false;
+
+  final String _logisticsTariff = 'Стандарт';
+  final double _tariffExtraFee = 0.0;
+  final bool _requiresDispatcher = false;
 
   String _comment = '';
   String _restaurantComment = '';
@@ -61,15 +83,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       userId = user.uid;
       String? effectiveShopId = (widget.shopId == "" || widget.shopId == "null" || widget.shopId == "combined") ? null : widget.shopId;
       cartNotifier = getCart(userId!, effectiveShopId);
-      cartNotifier.addListener(() { if (mounted) setState(() {}); });
+      cartNotifier.addListener(() {
+        if (mounted) {
+          setState(() {});
+        }
+      });
     } else {
       cartNotifier = ValueNotifier([]);
     }
   }
 
-  double get totalItemsPrice => cartNotifier.value.fold(0, (sum, item) => sum + item.dish.price * item.quantity);
+  double get totalItemsPrice => cartNotifier.value.fold(0.0, (acc, item) => acc + item.dish.price * item.quantity);
 
-  Future<void> _addToHistory(LatLng location) async {
+  Future<void> _addToHistory(LatLng location, String addressName) async {
     if (userId == null) return;
     final historyRef = FirebaseFirestore.instance
         .collection('users')
@@ -78,8 +104,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
     final existing = await historyRef.get();
     bool exists = existing.docs.any((doc) {
-      double lat = doc['lat'];
-      double lng = doc['lng'];
+      double lat = (doc['lat'] as num).toDouble();
+      double lng = (doc['lng'] as num).toDouble();
       return (lat - location.latitude).abs() < 0.0001 && (lng - location.longitude).abs() < 0.0001;
     });
 
@@ -87,19 +113,27 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       await historyRef.add({
         'lat': location.latitude,
         'lng': location.longitude,
+        'address': addressName, // Сохраняем текстовое название улицы
         'createdAt': FieldValue.serverTimestamp(),
       });
     }
   }
 
-  Future<void> _updateRouteAndMetrics(LatLng destination) async {
-    setState(() => _isLoadingRoute = true);
+  Future<void> _updateRouteAndMetrics(LatLng destination, {String? addressName}) async {
+    setState(() {
+      _isLoadingRoute = true;
+      _deliveryLocation = destination;
+      if (addressName != null) {
+        _deliveryAddressName = addressName;
+      }
+    });
+
     try {
       final shopDoc = await FirebaseFirestore.instance.collection('categories').doc(widget.shopId).get();
       if (!shopDoc.exists || shopDoc.data()?['lat'] == null) {
         _restaurantLocation = const LatLng(46.8410, 29.6470);
       } else {
-        _restaurantLocation = LatLng(shopDoc.data()!['lat'], shopDoc.data()!['lng']);
+        _restaurantLocation = LatLng((shopDoc.data()!['lat'] as num).toDouble(), (shopDoc.data()!['lng'] as num).toDouble());
       }
 
       final url = Uri.parse(
@@ -114,15 +148,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         final route = data['routes'][0];
 
         final geometry = route['geometry']['coordinates'] as List;
-        _routePoints = geometry.map((coord) => LatLng(coord[1].toDouble(), coord[0].toDouble())).toList();
+        _routePoints = geometry.map((coord) => LatLng((coord[1] as num).toDouble(), (coord[0] as num).toDouble())).toList();
 
-        double roadDistanceKm = route['distance'] / 1000.0;
-        double travelTimeMin = route['duration'] / 60.0;
+        double roadDistanceKm = (route['distance'] as num).toDouble() / 1000.0;
+        double travelTimeMin = (route['duration'] as num).toDouble() / 60.0;
+
+        // 🔹 Считаем цену через единый метод в OrdersService, чтобы на экране и в заказе всё было одинаково!
+        double calculatedPrice = OrdersService.calculateTaxiPrice(
+          distanceKm: roadDistanceKm,
+          durationMin: travelTimeMin.round(),
+        );
 
         setState(() {
-          _deliveryLocation = destination;
-          _deliveryPrice = 100.0 + (roadDistanceKm * 10.0);
-          _estimatedMinutes = travelTimeMin.round() + 10;
+          _roadDistanceKm = roadDistanceKm; // Сохраняем километры для вывода
+          _deliveryPrice = calculatedPrice;
+          _estimatedMinutes = travelTimeMin.round();
         });
 
         _mapController.fitCamera(
@@ -140,10 +180,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Future<void> _pickDeliveryLocation() async {
-    final LatLng? result = await Navigator.push(
-      context, MaterialPageRoute(builder: (_) => const SelectLocationScreen()),
+    final Map<String, dynamic>? result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SelectLocationScreen()),
     );
-    if (result != null) await _updateRouteAndMetrics(result);
+    if (result != null && result['latLng'] != null) {
+      await _updateRouteAndMetrics(
+        result['latLng'] as LatLng,
+        addressName: result['address'] as String?,
+      );
+    }
   }
 
   Future<void> _saveOrder() async {
@@ -162,12 +208,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       final shopDoc = await FirebaseFirestore.instance.collection('categories').doc(widget.shopId).get();
       final String shopCategory = shopDoc.data()?['category'] ?? 'store';
 
-      await _addToHistory(_deliveryLocation!);
+      final String finalAddress = _deliveryAddressName ?? 'Точка доставки';
+
+      // Сохраняем в историю с названием улицы
+      await _addToHistory(_deliveryLocation!, finalAddress);
 
       double itemsPrice = totalItemsPrice.roundToDouble();
       double deliveryPrice = _deliveryPrice.roundToDouble();
-      double totalOrderPrice = itemsPrice + deliveryPrice;
+      double totalOrderPrice = itemsPrice + deliveryPrice + _tariffExtraFee;
 
+      // Передаем координаты, адрес и дистанцию в метод сохранения заказа
       await OrdersService.addOrder(
         userId!, cartNotifier.value,
         restaurantName: widget.restaurantName,
@@ -178,12 +228,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         paymentMethod: _selectedPayment,
         lat: _deliveryLocation!.latitude,
         lng: _deliveryLocation!.longitude,
+        address: finalAddress,
         itemsPrice: itemsPrice,
         deliveryPrice: deliveryPrice,
         totalPrice: totalOrderPrice,
+        distanceKm: _roadDistanceKm, // 🔹 Передаем километры в метод заказа
+        durationMin: _estimatedMinutes,
       );
 
-      clearCart(userId!, widget.shopId);
+      String? effectiveShopId = (widget.shopId == "" || widget.shopId == "null" || widget.shopId == "combined") ? null : widget.shopId;
+      clearCart(userId!, effectiveShopId);
 
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
@@ -224,32 +278,39 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 itemCount: snapshot.data!.docs.length,
                 itemBuilder: (context, index) {
                   var doc = snapshot.data!.docs[index];
-                  LatLng loc = LatLng(doc['lat'], doc['lng']);
+                  var data = doc.data() as Map<String, dynamic>;
+
+                  LatLng loc = LatLng((data['lat'] as num).toDouble(), (data['lng'] as num).toDouble());
+
+                  String savedAddress = (data.containsKey('address') && data['address'] != null)
+                      ? data['address']
+                      : 'Адрес из истории';
+
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: InkWell(
-                      onTap: () => _updateRouteAndMetrics(loc),
+                      onTap: () => _updateRouteAndMetrics(loc, addressName: savedAddress),
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.black.withOpacity(0.05)),
+                          border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF0F172A).withOpacity(0.02),
+                              color: const Color(0xFF0F172A).withValues(alpha: 0.02),
                               blurRadius: 6,
                             ),
                           ],
                         ),
-                        child: const Row(
+                        child: Row(
                           children: [
-                            Icon(Icons.history_rounded, size: 14, color: Color(0xFF6366F1)),
-                            SizedBox(width: 6),
+                            const Icon(Icons.history_rounded, size: 14, color: Color(0xFFEF4444)),
+                            const SizedBox(width: 6),
                             Text(
-                              'Адрес из истории',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
+                              savedAddress,
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
                             ),
                           ],
                         ),
@@ -296,16 +357,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 children: [
                   _buildSectionTitle('Доставка'),
                   const SizedBox(height: 12),
-
-                  // БЛОК ВЫБОРА АДРЕСА И КАРТЫ
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Colors.black.withOpacity(0.04)),
+                      border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF0F172A).withOpacity(0.04),
+                          color: const Color(0xFF0F172A).withValues(alpha: 0.04),
                           blurRadius: 16,
                           offset: const Offset(0, 6),
                         ),
@@ -326,7 +385,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                 Container(
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF6366F1).withOpacity(0.1),
+                                    color: const Color(0xFF6366F1).withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(14),
                                   ),
                                   child: const Icon(Icons.location_on_rounded, color: Color(0xFF6366F1), size: 22),
@@ -337,17 +396,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        _deliveryLocation != null ? 'Адрес установлен' : 'Указать адрес на карте',
+                                        _deliveryLocation != null
+                                            ? (_deliveryAddressName ?? 'Адрес установлен')
+                                            : 'Указать адрес на карте',
                                         style: TextStyle(
                                           fontWeight: FontWeight.w800,
                                           fontSize: 15,
                                           color: _deliveryLocation != null ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
                                         ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                       if (_deliveryLocation != null) ...[
                                         const SizedBox(height: 2),
                                         Text(
-                                          '~$_estimatedMinutes мин до доставки',
+                                          '${_roadDistanceKm.toStringAsFixed(1)} км • ~$_estimatedMinutes мин',
                                           style: const TextStyle(
                                             color: Color(0xFF10B981),
                                             fontSize: 12,
@@ -370,6 +433,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             ),
                           ),
                         ),
+
                         if (_deliveryLocation != null && _restaurantLocation != null)
                           Container(
                             height: 160,
@@ -377,7 +441,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                               borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
                             ),
                             child: ClipRRect(
-                              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+                              borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
                               child: FlutterMap(
                                 mapController: _mapController,
                                 options: MapOptions(
@@ -385,14 +449,77 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                   initialZoom: 13,
                                 ),
                                 children: [
-                                  TileLayer(urlTemplate: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'),
+                                  TileLayer(
+                                    urlTemplate: 'https://map.99993.ru:1443/styles/openstreetmap/{z}/{x}/{y}.png',
+                                  ),
                                   if (_routePoints.isNotEmpty)
-                                    PolylineLayer(polylines: [
-                                      Polyline(points: _routePoints, strokeWidth: 4, color: const Color(0xFF6366F1)),
-                                    ]),
+                                    PolylineLayer(
+                                      polylines: [
+                                        Polyline(
+                                          points: _routePoints,
+                                          strokeWidth: 8.5,
+                                          color: const Color(0xFFD97706).withValues(alpha: 0.2),
+                                        ),
+                                        Polyline(
+                                          points: _routePoints,
+                                          strokeWidth: 4.5,
+                                          color: const Color(0xFF1E293B),
+                                          borderStrokeWidth: 1.5,
+                                          borderColor: const Color(0xFFF59E0B),
+                                        ),
+                                      ],
+                                    ),
                                   MarkerLayer(markers: [
-                                    Marker(point: _restaurantLocation!, child: const Icon(Icons.store_rounded, color: Color(0xFF0F172A), size: 22)),
-                                    Marker(point: _deliveryLocation!, child: const Icon(Icons.person_pin_circle_rounded, color: Color(0xFF6366F1), size: 28)),
+                                    Marker(
+                                      point: _restaurantLocation!,
+                                      width: 38,
+                                      height: 38,
+                                      alignment: Alignment.center,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF0F172A),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: const Color(0xFFF59E0B), width: 2),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withValues(alpha: 0.25),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 3),
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Icon(
+                                          Icons.storefront_rounded,
+                                          color: Color(0xFFF59E0B),
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ),
+                                    Marker(
+                                      point: _deliveryLocation!,
+                                      width: 32,
+                                      height: 32,
+                                      alignment: Alignment.center,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFEF4444),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.white, width: 2.5),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: const Color(0xFFEF4444).withValues(alpha: 0.35),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 3),
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Icon(
+                                          Icons.location_pin,
+                                          color: Colors.white,
+                                          size: 16,
+                                        ),
+                                      ),
+                                    ),
                                   ]),
                                 ],
                               ),
@@ -445,10 +572,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.black.withOpacity(0.04)),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withOpacity(0.03),
+            color: const Color(0xFF0F172A).withValues(alpha: 0.03),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -490,19 +617,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               color: selected ? const Color(0xFF0F172A) : Colors.white,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: selected ? Colors.transparent : Colors.black.withOpacity(0.05),
+                color: selected ? Colors.transparent : Colors.black.withValues(alpha: 0.05),
               ),
               boxShadow: selected
                   ? [
                 BoxShadow(
-                  color: const Color(0xFF0F172A).withOpacity(0.2),
+                  color: const Color(0xFF0F172A).withValues(alpha: 0.2),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 )
               ]
                   : [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.02),
+                  color: Colors.black.withValues(alpha: 0.02),
                   blurRadius: 4,
                 )
               ],
@@ -535,7 +662,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Widget _buildTotalPanel() {
     int displayItemsTotal = totalItemsPrice.round();
     int displayDelivery = _deliveryPrice.round();
-    int displayGrandTotal = displayItemsTotal + displayDelivery;
+    int displayExtraFee = _tariffExtraFee.round();
+    int displayGrandTotal = displayItemsTotal + displayDelivery + displayExtraFee;
 
     return SafeArea(
       bottom: true,
@@ -546,7 +674,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF0F172A).withOpacity(0.08),
+              color: const Color(0xFF0F172A).withValues(alpha: 0.08),
               blurRadius: 24,
               offset: const Offset(0, -8),
             )
@@ -566,10 +694,36 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Доставка (курьеру):', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600, fontSize: 13)),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Доставка (курьеру):', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600, fontSize: 13)),
+                    if (_deliveryLocation != null)
+                      Text(
+                        'Расстояние: ${_roadDistanceKm.toStringAsFixed(2)} км',
+                        style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w700),
+                      ),
+                  ],
+                ),
                 Text(
                   _deliveryLocation != null ? '$displayDelivery Руб' : '—',
                   style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Color(0xFF6366F1)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Text('Тариф 15-17: ', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600, fontSize: 13)),
+                    Text(_logisticsTariff, style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w800, fontSize: 13)),
+                  ],
+                ),
+                Text(
+                  displayExtraFee > 0 ? '+$displayExtraFee Руб' : '0 Руб',
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Color(0xFF10B981)),
                 ),
               ],
             ),
@@ -598,22 +752,36 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF0F172A).withOpacity(0.25),
+                      color: const Color(0xFF0F172A).withValues(alpha: 0.25),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     )
                   ],
                 ),
                 child: ElevatedButton(
-                  onPressed: _saveOrder,
+                  onPressed: _requiresDispatcher ? () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Требуется звонок диспетчера'),
+                        content: const Text('Габариты или вес заказа превышают стандартные лимиты службы «15-17». Наш диспетчер свяжется с вами для согласования доставки.'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Понятно'),
+                          ),
+                        ],
+                      ),
+                    );
+                  } : _saveOrder,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.transparent,
                     shadowColor: Colors.transparent,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
-                  child: const Text(
-                    'ОФОРМИТЬ ЗАКАЗ',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: 0.8, color: Colors.white),
+                  child: Text(
+                    _requiresDispatcher ? 'СОГЛАСОВАТЬ С ДИСПЕТЧЕРОМ' : 'ОФОРМИТЬ ЗАКАЗ',
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: 0.8, color: Colors.white),
                   ),
                 ),
               ),
@@ -634,20 +802,15 @@ class OrderConfirmationScreen extends StatelessWidget {
     switch (category?.toLowerCase()) {
       case 'restaurant':
         return 'Ваш заказ уже отправлен на кухню';
-
       case 'svetok':
         return 'Ваш заказ передан флористу';
-
       case 'electronika':
         return 'Ваш заказ передан на сборку';
-
       case 'product':
       case 'produkti':
         return 'Ваш заказ передан в магазин';
-
       case 'apteka':
         return 'Ваш заказ передан в аптеку';
-
       default:
         return 'Ваш заказ успешно передан продавцу';
     }
@@ -666,7 +829,7 @@ class OrderConfirmationScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withOpacity(0.1),
+                  color: const Color(0xFF10B981).withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 80),
@@ -694,7 +857,7 @@ class OrderConfirmationScreen extends StatelessWidget {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF0F172A).withOpacity(0.2),
+                        color: const Color(0xFF0F172A).withValues(alpha: 0.2),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       )
@@ -722,6 +885,9 @@ class OrderConfirmationScreen extends StatelessWidget {
   }
 }
 
+
+
+// Экран выбора точки на карте с автоматическим определением улицы (Reverse Geocoding)
 class SelectLocationScreen extends StatefulWidget {
   const SelectLocationScreen({super.key});
   @override
@@ -729,7 +895,125 @@ class SelectLocationScreen extends StatefulWidget {
 }
 
 class _SelectLocationScreenState extends State<SelectLocationScreen> {
-  LatLng? selectedLatLng;
+  final MapController _mapController = MapController();
+
+  LatLng? _currentCenterCoord;
+  String? _resolvedAddress;
+  bool _isLoadingAddress = false;
+  Timer? _debounceTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentCenterCoord = const LatLng(46.8410, 29.6470);
+    _onMapPositionChanged(_currentCenterCoord!, true);
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
+
+  // Метод отслеживания движения карты с debounce (защита от частых запросов)
+  void _onMapPositionChanged(LatLng center, bool isInitial) {
+    setState(() {
+      _currentCenterCoord = center;
+      if (!isInitial) {
+        _isLoadingAddress = true;
+        _resolvedAddress = 'Определяем точный адрес...';
+      }
+    });
+
+    if (isInitial) {
+      _fetchAddressFromCoordinates(center);
+    } else {
+      _debounceTimer?.cancel();
+      _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+        _fetchAddressFromCoordinates(center);
+      });
+    }
+  }
+
+  // Метод для запроса названия улицы/адреса по координатам через OpenStreetMap Nominatim
+  Future<void> _fetchAddressFromCoordinates(LatLng latLng) async {
+    try {
+      final url = Uri.parse(
+        'https://nominatim.openstreetmap.org/reverse?format=json&lat=${latLng.latitude}&lon=${latLng.longitude}&accept-language=ru&addressdetails=1',
+      );
+
+      final response = await http.get(
+        url,
+        headers: {'User-Agent': 'FlutterAppDeliveryOrder/1.0'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final address = data['address'] as Map<String, dynamic>?;
+
+        if (address != null) {
+          String road = address['road'] ?? address['pedestrian'] ?? address['street'] ?? address['path'] ?? '';
+          String houseNumber = address['house_number'] ?? address['building'] ?? '';
+          String suburb = address['suburb'] ?? address['neighbourhood'] ?? address['city_district'] ?? '';
+          String city = address['city'] ?? address['town'] ?? address['village'] ?? address['hamlet'] ?? address['county'] ?? '';
+
+          List<String> parts = [];
+          if (road.isNotEmpty) {
+            if (houseNumber.isNotEmpty) {
+              parts.add('$road, $houseNumber');
+            } else {
+              parts.add(road);
+            }
+          } else if (suburb.isNotEmpty) {
+            parts.add(suburb);
+          }
+
+          if (city.isNotEmpty && !parts.contains(city)) {
+            parts.add(city);
+          }
+
+          if (mounted) {
+            setState(() {
+              if (parts.isNotEmpty) {
+                _resolvedAddress = parts.join(', ');
+              } else {
+                String rawName = data['display_name'] ?? '';
+                List<String> splitName = rawName.split(', ');
+                if (splitName.length > 3) splitName.removeLast();
+                _resolvedAddress = splitName.isNotEmpty ? splitName.join(', ') : 'Координаты: ${latLng.latitude.toStringAsFixed(4)}, ${latLng.longitude.toStringAsFixed(4)}';
+              }
+            });
+          }
+        } else {
+          if (mounted) {
+            setState(() {
+              _resolvedAddress = '${latLng.latitude.toStringAsFixed(5)}, ${latLng.longitude.toStringAsFixed(5)}';
+            });
+          }
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _resolvedAddress = '${latLng.latitude.toStringAsFixed(5)}, ${latLng.longitude.toStringAsFixed(5)} (Лимит)';
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Ошибка геокодинга: $e');
+      if (mounted) {
+        setState(() {
+          _resolvedAddress = '${latLng.latitude.toStringAsFixed(5)}, ${latLng.longitude.toStringAsFixed(5)}';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingAddress = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -747,59 +1031,141 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
       ),
       body: Stack(
         children: [
+          // Карта с отслеживанием центра
           FlutterMap(
+            mapController: _mapController,
             options: MapOptions(
               initialCenter: const LatLng(46.8410, 29.6470),
-              initialZoom: 15,
-              onTap: (tapPos, latLng) => setState(() => selectedLatLng = latLng),
+              initialZoom: 16,
+              onPositionChanged: (position, hasGesture) {
+                if (hasGesture && position.center != null) {
+                  _onMapPositionChanged(position.center!, false);
+                }
+              },
             ),
             children: [
-              TileLayer(urlTemplate: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'),
-              if (selectedLatLng != null)
-                MarkerLayer(markers: [
-                  Marker(
-                    point: selectedLatLng!,
-                    child: const Icon(Icons.location_on_rounded, color: Color(0xFF6366F1), size: 48),
-                  )
-                ]),
+              TileLayer(
+                urlTemplate: 'https://map.99993.ru:1443/styles/openstreetmap/{z}/{x}/{y}.png',
+              ),
             ],
           ),
-          if (selectedLatLng != null)
-            Positioned(
-              bottom: 34,
-              left: 20,
-              right: 20,
-              child: SafeArea(
+
+          // Роскошная красная/коралловая булавка строго по центру экрана с тенью
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: 38), // компенсируем «ножку» иконки
+              child: Icon(
+                Icons.location_on_rounded,
+                color: Color(0xFFEF4444), // Красивый современный красный (Red-500)
+                size: 52,
+              ),
+            ),
+          ),
+
+          // Премиальная плашка с отображением найденной улицы сверху карты
+          Positioned(
+            top: 16,
+            left: 20,
+            right: 20,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0F172A).withValues(alpha: 0.08),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.place_rounded, color: Color(0xFFEF4444), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _resolvedAddress ?? 'Переместите карту для выбора...',
+                      style: const TextStyle(
+                        color: Color(0xFF0F172A),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (_isLoadingAddress) ...[
+                    const SizedBox(width: 12),
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444)),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+
+          // Роскошная кнопка подтверждения точки внизу экрана с градиентом
+          Positioned(
+            bottom: 24,
+            left: 20,
+            right: 20,
+            child: SafeArea(
+              child: SizedBox(
+                height: 56,
                 child: Container(
-                  height: 54,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(18),
                     gradient: const LinearGradient(
                       colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF0F172A).withOpacity(0.3),
+                        color: const Color(0xFF0F172A).withValues(alpha: 0.3),
                         blurRadius: 16,
                         offset: const Offset(0, 6),
-                      )
+                      ),
                     ],
                   ),
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.transparent,
                       shadowColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                     ),
-                    onPressed: () => Navigator.pop(context, selectedLatLng),
+                    onPressed: _currentCenterCoord != null
+                        ? () => Navigator.pop(context, {
+                      'latLng': _currentCenterCoord,
+                      'address': _resolvedAddress,
+                    })
+                        : null,
                     child: const Text(
                       'ПОДТВЕРДИТЬ ЭТОТ АДРЕС',
-                      style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 0.8, color: Colors.white),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 15,
+                        letterSpacing: 0.8,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
+          ),
         ],
       ),
     );

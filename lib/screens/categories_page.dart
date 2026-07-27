@@ -3,10 +3,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:untitled1/screens/restouranti/food_restaurants_screen.dart';
 import 'package:untitled1/screens/Produckti/product_menu.dart';
+import 'package:untitled1/screens/stroimaterial/stroimaterial_screen.dart';
 import '../screens/Apteki/apteka_screen.dart';
 import '../screens/Floarele/floare_menu.dart';
 import '../screens/electroniki/electronika_menu.dart';
 import 'Dostavka/delivery_services_screen.dart';
+import 'odejda/odejda_screen.dart';
+
 
 class Category {
   final String title;
@@ -55,8 +58,20 @@ final categories = [
     accentColor: const Color(0xFF6366F1),
   ),
   Category(
+    title: 'Одежда',
+    subtitle: 'Стиль и обувь', // Поправили описание
+    icon: Icons.checkroom_rounded, // Подходящая иконка для одежды
+    accentColor: const Color(0xFFA855F7), // Красивый фиолетовый акцент
+  ),
+  Category(
+    title: 'Стройматериалы', // Поправили название (во множественном числе)
+    subtitle: 'Ремонт и дом', // Поправили описание
+    icon: Icons.home_repair_service_rounded, // Подходящая иконка для стройки
+    accentColor: const Color(0xFFF59E0B), // Тёплый строительный оранжевый
+  ),
+  Category(
     title: 'Доставка',
-    subtitle: 'Экспресс курьер',
+    subtitle: 'Индивидуальная',
     icon: Icons.local_shipping_rounded,
     accentColor: const Color(0xFF8B5CF6),
   ),
@@ -105,6 +120,12 @@ class _CategoriesPageState extends State<CategoriesPage>
         break;
       case 'Цветы':
         screen = const FloareScreen();
+        break;
+      case 'Одежда':
+        screen = const ClothingStoresScreen();
+        break;
+      case 'Стройматериалы':
+        screen = const StroiMaterialScreen();
         break;
       case 'Доставка':
         screen = const DeliveryServicesScreen();
@@ -313,7 +334,7 @@ class _CategoriesPageState extends State<CategoriesPage>
                       crossAxisCount: 2,
                       crossAxisSpacing: 14,
                       mainAxisSpacing: 14,
-                      childAspectRatio: 0.95,
+                      childAspectRatio: 0.88, // Увеличена высота карточки, чтобы длинные тексты и подзаголовки помещались идеально на всех экранах
                     ),
                     delegate: SliverChildBuilderDelegate(
                           (context, index) {
@@ -429,7 +450,7 @@ class _CategoryCardState extends State<_CategoryCard> {
         curve: Curves.easeOut,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(30),
@@ -446,7 +467,7 @@ class _CategoryCardState extends State<_CategoryCard> {
               ),
             ]
                 : [
-              // Объемная основная тень
+              // Объёмная основная тень
               BoxShadow(
                 color: const Color(0xFF64748B).withOpacity(0.08),
                 blurRadius: 24,
@@ -470,9 +491,9 @@ class _CategoryCardState extends State<_CategoryCard> {
                   // Объёмный 3D-контейнер для иконки с градиентным бликом
                   Container(
                     width: 52,
-                    height: 52,
+                    height: 46,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(16),
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
@@ -489,20 +510,20 @@ class _CategoryCardState extends State<_CategoryCard> {
                         ),
                       ],
                     ),
-                    child: Icon(widget.category.icon, size: 26, color: Colors.white),
+                    child: Icon(widget.category.icon, size: 25, color: Colors.white),
                   ),
 
                   // Стрелка действия
                   Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF1F5F9),
+                    width: 32,
+                    height: 32,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF1F5F9),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
                       Icons.arrow_forward_rounded,
-                      size: 14,
+                      size: 17,
                       color: Color(0xFF64748B),
                     ),
                   ),
@@ -513,8 +534,10 @@ class _CategoryCardState extends State<_CategoryCard> {
                 children: [
                   Text(
                     widget.category.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 17,
+                      fontSize: 15,
                       fontWeight: FontWeight.w900,
                       color: Color(0xFF0F172A),
                       letterSpacing: -0.3,
@@ -523,6 +546,8 @@ class _CategoryCardState extends State<_CategoryCard> {
                   const SizedBox(height: 2),
                   Text(
                     widget.category.subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
