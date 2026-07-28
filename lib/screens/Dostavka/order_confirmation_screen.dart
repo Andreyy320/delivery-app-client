@@ -18,6 +18,8 @@ class ExpressOrderConfirmationScreen extends StatefulWidget {
   final String initialComment;
   final String initialReceiverName;
   final String initialReceiverPhone;
+  final String subType; // Тип заказа (например: 'buy', 'pickup', 'task')
+  final String transport; // Выбранный транспорт ('scooter', 'car')
 
   const ExpressOrderConfirmationScreen({
     super.key,
@@ -30,6 +32,8 @@ class ExpressOrderConfirmationScreen extends StatefulWidget {
     this.initialComment = '',
     this.initialReceiverName = '',
     this.initialReceiverPhone = '',
+    required this.subType,
+    required this.transport,
   });
 
   @override
@@ -199,7 +203,6 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
       final user = FirebaseAuth.instance.currentUser;
       final userId = user?.uid ?? 'guest_user';
 
-      // 🔍 Получаем имя и телефон текущего клиента из его документа в Firestore
       String clientName = 'Не указано';
       String clientPhone = 'Не указано';
 
@@ -244,7 +247,7 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
         'duration_min': widget.durationMin,
         'comment': _commentController.text.trim(),
         'createdAt': FieldValue.serverTimestamp(),
-        'status': 'new', // Статус, как мы обсуждали ранее
+        'status': 'new',
         'userId': userId,
         'clientId': userId,
         'clientName': clientName,
@@ -252,6 +255,8 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
         'clientPhone': clientPhone,
         'phone': clientPhone,
         'type': 'delivery',
+        'subType': widget.subType,
+        'transport': widget.transport,
       };
 
       if (_receiverNameController.text.trim().isNotEmpty || _receiverPhoneController.text.trim().isNotEmpty) {
@@ -521,13 +526,10 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
                         const SizedBox(height: 12),
                         _buildAddressCard(),
                         const SizedBox(height: 24),
-
-                        // Блок данных получателя
                         _buildSectionHeader('ДАННЫЕ ПОЛУЧАТЕЛЯ'),
                         const SizedBox(height: 12),
                         _buildReceiverCard(),
                         const SizedBox(height: 24),
-
                         _buildSectionHeader('ЧТО ВЕЗЕМ?'),
                         const SizedBox(height: 12),
                         Container(
@@ -864,19 +866,20 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
         break;
       case 'fragile':
         title = 'Хрупкий груз';
-        icon = Icons.security_rounded;
+        icon = Icons.warning_amber_rounded;
         break;
       case 'large':
-        title = 'Крупный габарит';
+        title = 'Крупногабаритный груз';
         icon = Icons.local_shipping_rounded;
         break;
       default:
         title = optId;
+        icon = Icons.check_circle_outline;
     }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -884,20 +887,20 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF0F172A).withValues(alpha: 0.03),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFFD97706).withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(14),
+              color: const Color(0xFFD97706).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, size: 20, color: const Color(0xFFD97706)),
+            child: Icon(icon, color: const Color(0xFFD97706), size: 20),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -925,82 +928,87 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
   }
 
   Widget _buildBottomAction(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-
     return Container(
-      padding: EdgeInsets.fromLTRB(24, 20, 24, bottomPadding > 0 ? bottomPadding + 12 : 24),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF0F172A).withValues(alpha: 0.08),
-            blurRadius: 24,
-            offset: const Offset(0, -8),
+            blurRadius: 20,
+            offset: const Offset(0, -6),
           ),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'ИТОГО К ОПЛАТЕ',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF94A3B8),
-                  letterSpacing: 0.8,
-                ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'ИТОГО К ОПЛАТЕ',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF94A3B8),
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${widget.totalCost.toStringAsFixed(0)} Руб',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 2),
-              Text(
-                '${widget.totalCost.toInt()} Руб',
-                style: const TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF0F172A),
-                  letterSpacing: -0.8,
-                ),
-              ),
-            ],
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFD97706),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-              elevation: 6,
-              shadowColor: const Color(0xFFD97706).withValues(alpha: 0.4),
             ),
-            onPressed: isSubmittingOrder ? null : _submitOrder,
-            child: isSubmittingOrder
-                ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-            )
-                : const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'ПОДТВЕРДИТЬ',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                    letterSpacing: 0.5,
+            const SizedBox(width: 16),
+            Expanded(
+              flex: 2,
+              child: SizedBox(
+                height: 54,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD97706),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    shadowColor: const Color(0xFFD97706).withValues(alpha: 0.4),
+                  ),
+                  onPressed: isSubmittingOrder ? null : _submitOrder,
+                  child: isSubmittingOrder
+                      ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2.5,
+                    ),
+                  )
+                      : const Text(
+                    'Заказать',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.2,
+                    ),
                   ),
                 ),
-                SizedBox(width: 8),
-                Icon(Icons.check_rounded, size: 18),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

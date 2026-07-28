@@ -18,10 +18,15 @@ class ExpressDeliveryScreen extends StatefulWidget {
 }
 
 class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
+  // Выбранный режим задачи (забрать, купить, поручение)
+  String _selectedTaskType = 'buy'; // 'pickup', 'buy', 'task'
+
+  // Выбранный тип транспорта (электровелосипед или машина)
+  String _selectedTransport = 'car'; // 'scooter', 'car'
+
   LatLng? _pickupLocation;
   LatLng? _dropoffLocation;
 
-  // Переменные для сохранения текстовых названий улиц/адресов
   String? _pickupAddress;
   String? _dropoffAddress;
 
@@ -29,13 +34,13 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
 
   final TextEditingController _receiverNameController = TextEditingController();
   final TextEditingController _receiverPhoneController = TextEditingController();
-  // Контроллер для описания того, что нужно перевезти
   final TextEditingController _descriptionController = TextEditingController();
 
   double _rawDistanceKm = 0.0;
   int _rawDurationMin = 0;
   bool _isCalculatingRoute = false;
 
+  // Доступные параметры груза (включая "Оплатит получатель")
   final List<String> allOptions = ['receiver_pay', 'fragile', 'large'];
   final Map<String, String> optionTitles = {
     'receiver_pay': 'Оплатит получатель',
@@ -56,6 +61,24 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
     'receiver_pay': 0,
     'fragile': 50,
     'large': 100,
+  };
+
+  // Настройки транспорта
+  final Map<String, String> transportTitles = {
+    'scooter': 'Электровелосипед',
+    'car': 'Автомобиль',
+  };
+  final Map<String, String> transportSubtitles = {
+    'scooter': 'До 20 кг',
+    'car': 'До 150 кг',
+  };
+  final Map<String, IconData> transportIcons = {
+    'scooter': Icons.electric_bike_rounded,
+    'car': Icons.directions_car_rounded,
+  };
+  final Map<String, double> transportMultipliers = {
+    'scooter': 1.0,
+    'car': 1.4,
   };
 
   @override
@@ -126,7 +149,8 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
   double _calculateRoadPrice() {
     double base = 150.0;
     double kmRate = 25.0;
-    return base + (_rawDistanceKm * kmRate);
+    double mult = transportMultipliers[_selectedTransport] ?? 1.0;
+    return (base + (_rawDistanceKm * kmRate)) * mult;
   }
 
   double _calculateTotalPrice() {
@@ -187,8 +211,10 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
           distanceKm: _rawDistanceKm,
           durationMin: _rawDurationMin,
           initialComment: _descriptionController.text.trim(),
-          initialReceiverName: _receiverNameController.text.trim(),     // <--- Передаем имя
-          initialReceiverPhone: _receiverPhoneController.text.trim(),   // <--- Передаем телефон
+          initialReceiverName: _receiverNameController.text.trim(),
+          initialReceiverPhone: _receiverPhoneController.text.trim(),
+          subType: _selectedTaskType, // Исправлено: передаем верное состояние
+          transport: _selectedTransport, // Исправлено: передаем верное состояние
         ),
       ),
     );
@@ -201,12 +227,9 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
   Future<void> _finalSaveToFirebase() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      debugPrint('❌ ОШИБКА: Пользователь не авторизован (user == null)');
       _showError('Ошибка: Пользователь не авторизован');
       return;
     }
-
-    debugPrint('🔍 Ищем данные пользователя в Firestore для UID: ${user.uid}');
 
     showCupertinoDialog(
       context: context,
@@ -223,9 +246,7 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
           .get(const GetOptions(source: Source.serverAndCache));
 
       final userData = userDoc.data() ?? {};
-      debugPrint('📦 Сырые данные пользователя из Firestore: $userData');
 
-      // Проверяем все возможные варианты названий полей
       final String clientName = userData['name'] ??
           userData['fullName'] ??
           userData['userName'] ??
@@ -240,19 +261,23 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
           user.phoneNumber ??
           'Не указано';
 
-      debugPrint('👤 Распознанное имя клиента: "$clientName"');
-      debugPrint('📞 Распознанный телефон клиента: "$clientPhone"');
-
-      // Временная проверка прямо на экране (удалиш потом),
-      // чтобы ты сразу увидел в уведомлении, что пришло из базы:
-      // _showError('Имя: $clientName | Тел: $clientPhone');
-
       final roadPrice = _calculateRoadPrice();
       final totalCost = _calculateTotalPrice();
 
       final orderData = {
-        'pickup': {'lat': _pickupLocation!.latitude, 'lng': _pickupLocation!.longitude},
-        'dropoff': {'lat': _dropoffLocation!.latitude, 'lng': _dropoffLocation!.longitude},
+        'type': 'delivery',
+        'subType': _selectedTaskType,
+        'transport': _selectedTransport,
+        'pickup': {
+          'address': _pickupAddress ?? 'Адрес не указан',
+          'lat': _pickupLocation!.latitude,
+          'lon': _pickupLocation!.longitude,
+        },
+        'dropoff': {
+          'address': _dropoffAddress ?? 'Адрес не указан',
+          'lat': _dropoffLocation!.latitude,
+          'lon': _dropoffLocation!.longitude,
+        },
         'pickupAddress': _pickupAddress ?? 'Адрес не указан',
         'dropoffAddress': _dropoffAddress ?? 'Адрес не указан',
         'description': _descriptionController.text.trim().isEmpty
@@ -271,14 +296,11 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
         'name': clientName,
         'clientPhone': clientPhone,
         'phone': clientPhone,
-        'type': 'delivery',
         if (selectedOptions.contains('receiver_pay')) ...{
           'receiverName': _receiverNameController.text.trim(),
           'receiverPhone': _receiverPhoneController.text.trim(),
         },
       };
-
-      debugPrint('🚀 Отправляем заказ в Firestore: $orderData');
 
       await FirebaseFirestore.instance
           .collection('users')
@@ -286,14 +308,11 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
           .collection('delivery_orders')
           .add(orderData);
 
-      debugPrint('✅ Заказ успешно сохранен!');
-
       if (mounted) {
         Navigator.of(context, rootNavigator: true).pop();
         Navigator.pop(context);
       }
     } catch (e) {
-      debugPrint('❌ ОШИБКА при сохранении заказа: $e');
       if (mounted) Navigator.of(context, rootNavigator: true).pop();
       _showError("Ошибка сохранения: $e");
     }
@@ -352,6 +371,10 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // --- 3 РЕЖИМА ДОСТАВКИ ---
+                    _buildTaskTypeSelector(),
+                    const SizedBox(height: 24),
+
                     _buildSectionHeader('МАРШРУТ'),
                     const SizedBox(height: 12),
                     Container(
@@ -370,8 +393,8 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
                       child: Column(
                         children: [
                           _buildAddressCard(
-                            title: 'АДРЕС ОТПРАВЛЕНИЯ',
-                            hint: 'Укажите, откуда забрать отправление',
+                            title: _selectedTaskType == 'buy' ? 'КУПИТЬ В МАГАЗИНЕ' : 'АДРЕС ОТПРАВЛЕНИЯ',
+                            hint: _selectedTaskType == 'buy' ? 'Укажите магазин' : 'Укажите, откуда забрать отправление',
                             addressText: _pickupAddress,
                             location: _pickupLocation,
                             icon: Icons.my_location_rounded,
@@ -418,10 +441,24 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
                       )
                     else if (_rawDistanceKm > 0)
                       _routeInfoTile(),
+
                     const SizedBox(height: 32),
 
-                    // Поле ввода: Что везем
-                    _buildSectionHeader('ЧТО ВЕЗЕМ?'),
+                    // --- ТИП ТРАНСПОРТА ---
+                    _buildSectionHeader('ТРАНСПОРТ'),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(child: _buildTransportCard('scooter')),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildTransportCard('car')),
+                      ],
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    // Поле ввода: Что везем / Список покупок
+                    _buildSectionHeader(_selectedTaskType == 'buy' ? 'СПИСОК ПОКУПОК' : 'ЧТО ВЕЗЕМ?'),
                     const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.all(16),
@@ -442,7 +479,7 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
                         maxLines: 2,
                         style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Color(0xFF0F172A)),
                         decoration: InputDecoration(
-                          hintText: 'Например: документы, личные вещи',
+                          hintText: _selectedTaskType == 'buy' ? 'Например: молоко 2.5%, хлеб, вода' : 'Например: документы, личные вещи',
                           hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
                           prefixIcon: const Padding(
                             padding: EdgeInsets.only(bottom: 24),
@@ -467,11 +504,267 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
                     _buildSectionHeader('ПАРАМЕТРЫ ЗАКАЗА'),
                     const SizedBox(height: 12),
                     ...allOptions.map(_buildOptionTile).toList(),
+
+                    // Блок полей ввода для опции "Оплатит получатель"
+                    if (selectedOptions.contains('receiver_pay')) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: const Color(0xFFD97706), width: 1.5),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFD97706).withOpacity(0.06),
+                              blurRadius: 16,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'ДАННЫЕ ПОЛУЧАТЕЛЯ',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFFD97706),
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            TextField(
+                              controller: _receiverNameController,
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Color(0xFF0F172A)),
+                              decoration: InputDecoration(
+                                hintText: 'Имя получателя',
+                                hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                                prefixIcon: const Icon(Icons.person_outline_rounded, color: Color(0xFFD97706), size: 20),
+                                filled: true,
+                                fillColor: const Color(0xFFF8FAFC),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFD97706), width: 1.5)),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _receiverPhoneController,
+                              keyboardType: TextInputType.phone,
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Color(0xFF0F172A)),
+                              decoration: InputDecoration(
+                                hintText: 'Номер телефона',
+                                hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                                prefixIcon: const Icon(Icons.phone_outlined, color: Color(0xFFD97706), size: 20),
+                                filled: true,
+                                fillColor: const Color(0xFFF8FAFC),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFD97706), width: 1.5)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
             ),
             _bottomPricePanel(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Нижняя панель с ценой и кнопкой заказа
+  Widget _bottomPricePanel() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withOpacity(0.06),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Итого к оплате',
+                    style: TextStyle(
+                      color: Color(0xFF94A3B8),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _rawDistanceKm > 0 ? '${_calculateTotalPrice().toInt()} Руб' : 'Укажите маршрут',
+                    style: const TextStyle(
+                      color: Color(0xFF0F172A),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+            ElevatedButton(
+              onPressed: _isCalculatingRoute ? null : _goToConfirmation,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFD97706),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                disabledBackgroundColor: const Color(0xFFE2E8F0),
+              ),
+              child: const Text(
+                'Заказать',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Селектор 3 режимов сверху
+  Widget _buildTaskTypeSelector() {
+    final types = [
+      {'id': 'pickup', 'title': 'Забрать', 'icon': Icons.card_giftcard_rounded},
+      {'id': 'buy', 'title': 'Купить', 'icon': Icons.shopping_bag_outlined},
+      {'id': 'task', 'title': 'Поручение', 'icon': Icons.task_alt_rounded},
+    ];
+
+    return Row(
+      children: types.map((t) {
+        bool isSelected = _selectedTaskType == t['id'];
+        return Expanded(
+          child: GestureDetector(
+            onTap: () => setState(() => _selectedTaskType = t['id'] as String),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              margin: EdgeInsets.only(right: t['id'] != 'task' ? 8 : 0),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: isSelected ? const Color(0xFF0F172A) : Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: isSelected ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0F172A).withOpacity(isSelected ? 0.08 : 0.03),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    t['icon'] as IconData,
+                    color: isSelected ? Colors.white : const Color(0xFF64748B),
+                    size: 20,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    t['title'] as String,
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : const Color(0xFF0F172A),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildAddressCard({
+    required String title,
+    required String hint,
+    required String? addressText,
+    required LatLng? location,
+    required IconData icon,
+    required Color iconColor,
+    required VoidCallback onTap,
+    required bool isTop,
+  }) {
+    bool isSelected = location != null;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.vertical(
+        top: isTop ? const Radius.circular(24) : Radius.zero,
+        bottom: !isTop ? const Radius.circular(24) : Radius.zero,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(icon, color: iconColor, size: 22),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF94A3B8), letterSpacing: 0.5),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    addressText ?? hint,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: isSelected ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFFCBD5E1)),
           ],
         ),
       ),
@@ -548,22 +841,19 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
                       ),
                       child: Text(
                         '${_rawDistanceKm.toStringAsFixed(1)} км',
-                        style: const TextStyle(
-                          color: Color(0xFFF59E0B),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13,
-                        ),
+                        style: const TextStyle(color: Color(0xFFF59E0B), fontWeight: FontWeight.w800, fontSize: 12),
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Text('•', style: TextStyle(color: Colors.white54, fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 8),
-                    Text(
-                      '~$_rawDurationMin мин. в пути',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '~$_rawDurationMin мин',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
                       ),
                     ),
                   ],
@@ -572,359 +862,179 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTransportCard(String transportId) {
+    bool isSelected = _selectedTransport == transportId;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedTransport = transportId),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF0F172A) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF0F172A).withOpacity(isSelected ? 0.08 : 0.03),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: isSelected ? const Color(0xFFD97706) : const Color(0xFFD97706).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    transportIcons[transportId],
+                    color: isSelected ? Colors.white : const Color(0xFFD97706),
+                    size: 20,
+                  ),
+                ),
+                Icon(
+                  isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                  color: isSelected ? const Color(0xFFD97706) : const Color(0xFFCBD5E1),
+                  size: 20,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              transportTitles[transportId] ?? '',
+              style: TextStyle(
+                color: isSelected ? Colors.white : const Color(0xFF0F172A),
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              transportSubtitles[transportId] ?? '',
+              style: TextStyle(
+                color: isSelected ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                fontWeight: FontWeight.w600,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildOptionTile(String optId) {
     bool isSelected = selectedOptions.contains(optId);
-    bool isReceiverPay = optId == 'receiver_pay';
+    int price = optionPrices[optId] ?? 0;
 
-    return Column(
-      children: [
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              if (isSelected) {
-                selectedOptions.remove(optId);
-              } else {
-                selectedOptions.add(optId);
-              }
-            });
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeInOut,
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: isSelected ? const Color(0xFFFFFBEB) : Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: isSelected ? const Color(0xFFD97706) : const Color(0xFFF1F5F9),
-                width: isSelected ? 2.0 : 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: isSelected
-                      ? const Color(0xFFD97706).withOpacity(0.08)
-                      : const Color(0xFF0F172A).withOpacity(0.03),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFFD97706).withOpacity(0.15) : const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(
-                    optionIcons[optId] ?? Icons.extension_outlined,
-                    color: isSelected ? const Color(0xFFD97706) : const Color(0xFF64748B),
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        optionTitles[optId]!,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF0F172A),
-                          fontSize: 15,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      if (optionSubtitles[optId] != null) ...[
-                        const SizedBox(height: 3),
-                        Text(
-                          optionSubtitles[optId]!,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w500,
-                            color: Color(0xFF94A3B8),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      optionPrices[optId] == 0 ? 'Бесплатно' : '+${optionPrices[optId]} Руб',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                        color: isSelected ? const Color(0xFFD97706) : const Color(0xFF64748B),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isSelected ? const Color(0xFFD97706) : Colors.transparent,
-                        border: Border.all(
-                          color: isSelected ? const Color(0xFFD97706) : const Color(0xFFCBD5E1),
-                          width: 2,
-                        ),
-                      ),
-                      child: isSelected
-                          ? const Icon(Icons.check, size: 14, color: Colors.white)
-                          : null,
-                    ),
-                  ],
-                ),
-              ],
-            ),
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (isSelected) {
+            selectedOptions.remove(optId);
+          } else {
+            selectedOptions.add(optId);
+          }
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? const Color(0xFFD97706) : const Color(0xFFF1F5F9),
+            width: 1.5,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF0F172A).withOpacity(isSelected ? 0.06 : 0.03),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        if (isReceiverPay && isSelected)
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            margin: const EdgeInsets.only(bottom: 16, left: 8, right: 8),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFD97706).withOpacity(0.4), width: 1.5),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF0F172A).withOpacity(0.04),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'ДАННЫЕ ПОЛУЧАТЕЛЯ',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFFD97706),
-                    letterSpacing: 0.8,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _receiverNameController,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Color(0xFF0F172A)),
-                  decoration: InputDecoration(
-                    labelText: 'Имя получателя',
-                    labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
-                    prefixIcon: const Icon(Icons.person_outline_rounded, color: Color(0xFFD97706), size: 20),
-                    filled: true,
-                    fillColor: const Color(0xFFF8FAFC),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: Color(0xFFD97706), width: 1.5),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _receiverPhoneController,
-                  keyboardType: TextInputType.phone,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Color(0xFF0F172A)),
-                  decoration: InputDecoration(
-                    labelText: 'Номер телефона получателя',
-                    labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
-                    prefixIcon: const Icon(Icons.phone_outlined, color: Color(0xFFD97706), size: 20),
-                    filled: true,
-                    fillColor: const Color(0xFFF8FAFC),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: Color(0xFFD97706), width: 1.5),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _bottomPricePanel() {
-    final total = _calculateTotalPrice();
-    final bool canOrder = _rawDistanceKm > 0 && !_isCalculatingRoute;
-    final double bottomPadding = MediaQuery.of(context).padding.bottom;
-
-    return Container(
-      padding: EdgeInsets.fromLTRB(24, 20, 24, bottomPadding > 0 ? bottomPadding + 12 : 24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0F172A).withOpacity(0.08),
-            blurRadius: 24,
-            offset: const Offset(0, -8),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'ИТОГО К ОПЛАТЕ',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF94A3B8),
-                  letterSpacing: 0.8,
-                ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isSelected ? const Color(0xFFD97706).withOpacity(0.12) : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(14),
               ),
-              const SizedBox(height: 2),
+              child: Icon(
+                optionIcons[optId],
+                color: isSelected ? const Color(0xFFD97706) : const Color(0xFF64748B),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    optionTitles[optId] ?? '',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    optionSubtitles[optId] ?? '',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 11,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (price > 0) ...[
               Text(
-                '${total.toInt()} Руб',
+                '+$price Р',
                 style: const TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF0F172A),
-                  letterSpacing: -0.8,
-                ),
-              ),
-            ],
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: canOrder ? const Color(0xFFD97706) : const Color(0xFFE2E8F0),
-              foregroundColor: canOrder ? Colors.white : const Color(0xFF94A3B8),
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-              elevation: canOrder ? 6 : 0,
-              shadowColor: const Color(0xFFD97706).withOpacity(0.4),
-            ),
-            onPressed: canOrder ? _goToConfirmation : null,
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'ОФОРМИТЬ',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                SizedBox(width: 8),
-                Icon(Icons.arrow_forward_rounded, size: 18),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAddressCard({
-    required String title,
-    required String hint,
-    required String? addressText,
-    required LatLng? location,
-    required IconData icon,
-    required Color iconColor,
-    required VoidCallback onTap,
-    required bool isTop,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.vertical(
-          top: isTop ? const Radius.circular(24) : Radius.zero,
-          bottom: !isTop ? const Radius.circular(24) : Radius.zero,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Icon(icon, color: iconColor, size: 22),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF94A3B8),
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      addressText ?? (location != null
-                          ? "${location.latitude.toStringAsFixed(5)}, ${location.longitude.toStringAsFixed(5)}"
-                          : hint),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: (addressText != null || location != null) ? FontWeight.w700 : FontWeight.w500,
-                        fontSize: 15,
-                        color: (addressText != null || location != null) ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
-                      ),
-                    ),
-                  ],
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  color: Color(0xFFD97706),
                 ),
               ),
               const SizedBox(width: 12),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFF8FAFC),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8), size: 20),
-              ),
             ],
-          ),
+            Icon(
+              isSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+              color: isSelected ? const Color(0xFFD97706) : const Color(0xFFCBD5E1),
+              size: 22,
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-// Экран выбора точки на карте с автоматическим определением улицы (Reverse Geocoding)
+
+
+// --- ЭКРАН ВЫБОРА ТОЧКИ НА КАРТЕ С КНОПКОЙ ПОДТВЕРЖДЕНИЯ ---
 class SelectLocationScreen extends StatefulWidget {
   final String titleText;
   final LatLng? initialLocation;
@@ -940,18 +1050,18 @@ class SelectLocationScreen extends StatefulWidget {
 }
 
 class _SelectLocationScreenState extends State<SelectLocationScreen> {
-  final MapController _mapController = MapController();
-
-  LatLng? _currentCenterCoord;
-  String? _resolvedAddress;
+  late MapController _mapController;
+  late LatLng _currentCenter;
+  String _currentAddress = 'Определяем адрес...';
   bool _isLoadingAddress = false;
   Timer? _debounceTimer;
 
   @override
   void initState() {
     super.initState();
-    _currentCenterCoord = widget.initialLocation ?? const LatLng(46.8410, 29.6470);
-    _onMapPositionChanged(_currentCenterCoord!, true);
+    _mapController = MapController();
+    _currentCenter = widget.initialLocation ?? const LatLng(46.8403, 29.6433); // Тирасполь по умолчанию
+    _getAddressFromLatLng(_currentCenter);
   }
 
   @override
@@ -960,100 +1070,45 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
     super.dispose();
   }
 
-  void _onMapPositionChanged(LatLng center, bool isInitial) {
-    setState(() {
-      _currentCenterCoord = center;
-      if (!isInitial) {
-        _isLoadingAddress = true;
-        _resolvedAddress = 'Определяем точный адрес...';
-      }
-    });
+  Future<void> _getAddressFromLatLng(LatLng point) async {
+    setState(() => _isLoadingAddress = true);
+    final url = Uri.parse(
+        'https://nominatim.openstreetmap.org/reverse?format=json&lat=${point.latitude}&lon=${point.longitude}&zoom=18&addressdetails=1');
 
-    if (isInitial) {
-      _fetchAddressFromCoordinates(center);
-    } else {
-      _debounceTimer?.cancel();
-      _debounceTimer = Timer(const Duration(milliseconds: 500), () {
-        _fetchAddressFromCoordinates(center);
-      });
-    }
-  }
-
-  Future<void> _fetchAddressFromCoordinates(LatLng latLng) async {
     try {
-      final url = Uri.parse(
-        'https://nominatim.openstreetmap.org/reverse?format=json&lat=${latLng.latitude}&lon=${latLng.longitude}&accept-language=ru&addressdetails=1',
-      );
-
-      final response = await http.get(
-        url,
-        headers: {'User-Agent': 'FlutterAppDeliveryOrder/1.0'},
-      );
-
+      final response = await http.get(url, headers: {'User-Agent': 'ExpressDeliveryApp'});
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final address = data['address'] as Map<String, dynamic>?;
-
-        if (address != null) {
-          String road = address['road'] ?? address['pedestrian'] ?? address['street'] ?? address['path'] ?? '';
-          String houseNumber = address['house_number'] ?? address['building'] ?? '';
-          String suburb = address['suburb'] ?? address['neighbourhood'] ?? address['city_district'] ?? '';
-          String city = address['city'] ?? address['town'] ?? address['village'] ?? address['hamlet'] ?? address['county'] ?? '';
-
-          List<String> parts = [];
-          if (road.isNotEmpty) {
-            if (houseNumber.isNotEmpty) {
-              parts.add('$road, $houseNumber');
-            } else {
-              parts.add(road);
-            }
-          } else if (suburb.isNotEmpty) {
-            parts.add(suburb);
-          }
-
-          if (city.isNotEmpty && !parts.contains(city)) {
-            parts.add(city);
-          }
-
-          if (mounted) {
+        if (data != null && data['display_name'] != null) {
+          final addressParts = (data['display_name'] as String).split(',');
+          // Берем первые 3 понятных части адреса
+          if (addressParts.length >= 3) {
             setState(() {
-              if (parts.isNotEmpty) {
-                _resolvedAddress = parts.join(', ');
-              } else {
-                String rawName = data['display_name'] ?? '';
-                List<String> splitName = rawName.split(', ');
-                if (splitName.length > 3) splitName.removeLast();
-                _resolvedAddress = splitName.isNotEmpty ? splitName.join(', ') : 'Координаты: ${latLng.latitude.toStringAsFixed(4)}, ${latLng.longitude.toStringAsFixed(4)}';
-              }
+              _currentAddress = '${addressParts[0].trim()}, ${addressParts[1].trim()}';
+            });
+          } else {
+            setState(() {
+              _currentAddress = data['display_name'];
             });
           }
         } else {
-          if (mounted) {
-            setState(() {
-              _resolvedAddress = '${latLng.latitude.toStringAsFixed(5)}, ${latLng.longitude.toStringAsFixed(5)}';
-            });
-          }
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _resolvedAddress = '${latLng.latitude.toStringAsFixed(5)}, ${latLng.longitude.toStringAsFixed(5)} (Лимит)';
-          });
+          setState(() => _currentAddress = 'Адрес не найден');
         }
       }
     } catch (e) {
-      debugPrint('Ошибка геокодинга: $e');
-      if (mounted) {
-        setState(() {
-          _resolvedAddress = '${latLng.latitude.toStringAsFixed(5)}, ${latLng.longitude.toStringAsFixed(5)}';
-        });
-      }
+      setState(() => _currentAddress = 'Ошибка получения адреса');
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoadingAddress = false;
-        });
-      }
+      setState(() => _isLoadingAddress = false);
+    }
+  }
+
+  void _onPositionChanged(MapCamera camera, bool hasGesture) {
+    if (hasGesture) {
+      _currentCenter = camera.center;
+      _debounceTimer?.cancel();
+      _debounceTimer = Timer(const Duration(milliseconds: 400), () {
+        _getAddressFromLatLng(_currentCenter);
+      });
     }
   }
 
@@ -1062,148 +1117,174 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: Text(
-          widget.titleText,
-          style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w900, fontSize: 18),
-        ),
-        centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
+        leadingWidth: 68,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 16, top: 6, bottom: 6),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+            ),
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 16),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+        ),
+        title: Text(
+          widget.titleText,
+          style: const TextStyle(
+            color: Color(0xFF0F172A),
+            fontWeight: FontWeight.w800,
+            fontSize: 16,
+            letterSpacing: -0.5,
+          ),
+        ),
+        centerTitle: true,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: const Color(0xFFF1F5F9), height: 1),
+        ),
       ),
-      body: Stack(
-        children: [
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: _currentCenterCoord ?? const LatLng(46.8410, 29.6470),
-              initialZoom: 16,
-              onPositionChanged: (position, hasGesture) {
-                if (hasGesture && position.center != null) {
-                  _onMapPositionChanged(position.center!, false);
-                }
-              },
-            ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://map.99993.ru:1443/styles/openstreetmap/{z}/{x}/{y}.png',
-              ),
-            ],
-          ),
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.only(bottom: 38),
-              child: Icon(
-                Icons.location_on_rounded,
-                color: Color(0xFFEF4444),
-                size: 52,
-              ),
-            ),
-          ),
-          Positioned(
-            top: 16,
-            left: 20,
-            right: 20,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF0F172A).withOpacity(0.08),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: Row(
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // Карта на весь экран
+            Positioned.fill(
+              child: FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(
+                  initialCenter: _currentCenter,
+                  initialZoom: 16.0,
+                  onPositionChanged: _onPositionChanged,
+                ),
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEF4444).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.place_rounded, color: Color(0xFFEF4444), size: 20),
+                  TileLayer(
+                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.example.express_delivery',
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      _resolvedAddress ?? 'Переместите карту для выбора...',
-                      style: const TextStyle(
-                        color: Color(0xFF0F172A),
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (_isLoadingAddress) ...[
-                    const SizedBox(width: 12),
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444)),
-                    ),
-                  ],
                 ],
               ),
             ),
-          ),
-          Positioned(
-            bottom: 24,
-            left: 20,
-            right: 20,
-            child: SafeArea(
-              child: SizedBox(
-                height: 56,
+            // Пин по центру карты
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 36),
                 child: Container(
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    color: const Color(0xFFD97706),
+                    shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF0F172A).withOpacity(0.3),
+                        color: const Color(0xFFD97706).withOpacity(0.4),
                         blurRadius: 16,
                         offset: const Offset(0, 6),
                       ),
                     ],
                   ),
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  child: const Icon(Icons.location_on_rounded, color: Colors.white, size: 28),
+                ),
+              ),
+            ),
+            // Верхняя панель с выбранным адресом
+            Positioned(
+              top: 20,
+              left: 20,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0F172A).withOpacity(0.08),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
                     ),
-                    onPressed: _currentCenterCoord != null
-                        ? () => Navigator.pop(context, {
-                      'latLng': _currentCenterCoord,
-                      'address': _resolvedAddress,
-                    })
-                        : null,
-                    child: const Text(
-                      'ПОДТВЕРДИТЬ ЭТОТ АДРЕС',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 15,
-                        letterSpacing: 0.8,
+                  ],
+                  border: Border.all(color: const Color(0xFFF1F5F9), width: 1.5),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.search_rounded, color: Color(0xFFD97706), size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _isLoadingAddress
+                          ? const Text(
+                        'Загрузка адреса...',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.w600, fontSize: 13),
+                      )
+                          : Text(
+                        _currentAddress,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF0F172A),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
                       ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Нижняя кнопка подтверждения адреса (гарантированно поверх карты)
+            Positioned(
+              bottom: 20,
+              left: 20,
+              right: 20,
+              child: Container(
+                decoration: BoxDecoration(
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFD97706).withOpacity(0.3),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: ElevatedButton(
+                  onPressed: _isLoadingAddress
+                      ? null
+                      : () {
+                    Navigator.pop(context, {
+                      'latLng': _currentCenter,
+                      'address': _currentAddress,
+                    });
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD97706),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    disabledBackgroundColor: const Color(0xFFE2E8F0),
+                  ),
+                  child: const Text(
+                    'Подтвердить адрес',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.3,
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
+

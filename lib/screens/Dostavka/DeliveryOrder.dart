@@ -91,7 +91,7 @@ class DeliveryOrder {
       ),
       dropoff: LatLng(
         (dropoffMap['lat'] ?? dropoffMap['latitude'] ?? map['clientLat'] ?? 0).toDouble(),
-        (dropoffMap['lon'] ?? dropoffMap['lng'] ?? dropoffMap['longitude'] ?? map['clientLng'] ?? 0).toDouble(),
+        (dropoffMap['lon'] ?? dropoffMap['lng'] ?? map['clientLng'] ?? 0).toDouble(),
       ),
 
       // Корректно достаем адреса из карт
@@ -103,12 +103,12 @@ class DeliveryOrder {
       clientPhone: map['clientPhone'] ?? map['phone'],
       clientId: map['clientId'] ?? map['userId'],
 
-      // Данные получателя (с поддержкой возможных альтернативных ключей)
-      recipientName: map['recipientName'] ?? map['recipient_name'],
-      recipientPhone: map['recipientPhone'] ?? map['recipient_phone'],
+      // Данные получателя (поддержка receiverName и recipientName)
+      recipientName: map['receiverName'] ?? map['recipientName'] ?? map['recipient_name'],
+      recipientPhone: map['receiverPhone'] ?? map['recipientPhone'] ?? map['recipient_phone'],
 
-      // Комментарий к заказу (поддержка 'comment' и старого 'de')
-      comment: map['comment'] ?? map['de'],
+      // Комментарий к заказу (поддержка comment, description и старого de)
+      comment: map['comment'] ?? map['description'] ?? map['de'],
 
       options: List<String>.from(map['options'] ?? []),
       totalCost: (map['total_cost'] ?? map['totalCost'] ?? map['total'] ?? map['totalPrice'] ?? 0).toDouble(),
