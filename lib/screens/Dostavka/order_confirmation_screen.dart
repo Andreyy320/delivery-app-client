@@ -912,7 +912,7 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
           ),
           if (price > 0)
             Text(
-              '+$price ₽',
+              '+$price Руб',
               style: const TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 14,
@@ -958,7 +958,7 @@ class _ExpressOrderConfirmationScreenState extends State<ExpressOrderConfirmatio
               ),
               const SizedBox(height: 2),
               Text(
-                '${widget.totalCost.toInt()} ₽',
+                '${widget.totalCost.toInt()} Руб',
                 style: const TextStyle(
                   fontSize: 30,
                   fontWeight: FontWeight.w900,

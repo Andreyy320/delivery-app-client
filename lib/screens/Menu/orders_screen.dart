@@ -43,7 +43,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
     }
   }
 
-  // Перевод доп. опций для красоты
   String _translateOption(String option) {
     switch (option) {
       case 'receiver_pay': return 'Оплата получателем';
@@ -58,12 +57,26 @@ class _OrdersScreenState extends State<OrdersScreen> {
     ordersStream = FirebaseFirestore.instance
         .collection('users').doc(widget.userId).collection('orders')
         .orderBy('createdAt', descending: true).snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Order.fromFirestore(doc.id, doc.data())).toList());
+        .map((snapshot) => snapshot.docs.map((doc) {
+      try {
+        return Order.fromFirestore(doc.id, doc.data());
+      } catch (e) {
+        debugPrint('Ошибка парсинга заказа еды ${doc.id}: $e');
+        return null;
+      }
+    }).where((order) => order != null).cast<Order>().toList());
 
     deliveryStream = FirebaseFirestore.instance
         .collection('users').doc(widget.userId).collection('delivery_orders')
         .orderBy('createdAt', descending: true).snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => DeliveryOrder.fromFirestore(doc.id, doc.data())).toList());
+        .map((snapshot) => snapshot.docs.map((doc) {
+      try {
+        return DeliveryOrder.fromFirestore(doc.id, doc.data());
+      } catch (e) {
+        debugPrint('Ошибка парсинга доставки ${doc.id}: $e');
+        return null;
+      }
+    }).where((order) => order != null).cast<DeliveryOrder>().toList());
   }
 
   Future<void> _deleteOrder(String collectionPath, String orderId) async {
@@ -121,8 +134,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
       ),
-      // Используем StreamBuilder для ЕДЫ, а доставку слушаем через Future или объединяем.
-      // Но правильнее объединить их через Stream.
       body: StreamBuilder<List<Order>>(
         stream: ordersStream,
         builder: (context, orderSnapshot) {
@@ -221,7 +232,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 
   Widget _buildExpressCard(DeliveryOrder order) {
-    // Безопасно получаем адреса, а если их нет — выводим координаты
     String fromText = order.pickupAddress ??
         "${order.pickup.latitude.toStringAsFixed(6)}, ${order.pickup.longitude.toStringAsFixed(6)}";
 
@@ -257,7 +267,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
           _build3dConnector(),
           _routeRow(Icons.location_on_rounded, const Color(0xFF8B5CF6), "Куда: $toText"),
 
-          // Если в модели есть комментарий (например, "pasportrrr"), выведем его красивым блоком
           if (order.comment != null && order.comment!.trim().isNotEmpty) ...[
             const SizedBox(height: 12),
             Container(
@@ -327,12 +336,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
     Widget logoWidget = Container(
       padding: const EdgeInsets.all(9),
       decoration: BoxDecoration(
-        color: const Color(0xFFF97316).withOpacity(0.12),
+        color: const Color(0xFFF97316).withValues(alpha: 0.12),
         shape: BoxShape.circle,
-        border: Border.all(color: const Color(0xFFF97316).withOpacity(0.2)),
+        border: Border.all(color: const Color(0xFFF97316).withValues(alpha: 0.2)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFF97316).withOpacity(0.1),
+            color: const Color(0xFFF97316).withValues(alpha: 0.1),
             blurRadius: 6,
             offset: const Offset(0, 2),
           )
@@ -357,10 +366,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
               height: 36,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFFF97316).withOpacity(0.2), width: 1.5),
+                border: Border.all(color: const Color(0xFFF97316).withValues(alpha: 0.2), width: 1.5),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFFF97316).withOpacity(0.1),
+                    color: const Color(0xFFF97316).withValues(alpha: 0.1),
                     blurRadius: 6,
                     offset: const Offset(0, 2),
                   )
@@ -385,9 +394,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
           return Container(
             padding: const EdgeInsets.all(9),
             decoration: BoxDecoration(
-              color: const Color(0xFFF97316).withOpacity(0.12),
+              color: const Color(0xFFF97316).withValues(alpha: 0.12),
               shape: BoxShape.circle,
-              border: Border.all(color: const Color(0xFFF97316).withOpacity(0.2)),
+              border: Border.all(color: const Color(0xFFF97316).withValues(alpha: 0.2)),
             ),
             child: const Icon(Icons.restaurant_rounded, color: Color(0xFFF97316), size: 18),
           );
@@ -419,7 +428,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       borderRadius: BorderRadius.circular(10),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
+                          color: Colors.black.withValues(alpha: 0.04),
                           blurRadius: 6,
                           offset: const Offset(0, 2),
                         )
@@ -496,7 +505,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFF97316).withOpacity(0.25),
+                      color: const Color(0xFFF97316).withValues(alpha: 0.25),
                       blurRadius: 8,
                       offset: const Offset(0, 3),
                     )
@@ -526,7 +535,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return Container(
       padding: const EdgeInsets.all(9),
       decoration: BoxDecoration(
-        color: const Color(0xFFF97316).withOpacity(0.12),
+        color: const Color(0xFFF97316).withValues(alpha: 0.12),
         shape: BoxShape.circle,
       ),
       child: const Icon(Icons.restaurant_rounded, color: Color(0xFFF97316), size: 18),
@@ -563,12 +572,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
         border: Border.all(color: Colors.white, width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withOpacity(0.04),
+            color: const Color(0xFF0F172A).withValues(alpha: 0.04),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
           BoxShadow(
-            color: const Color(0xFF0F172A).withOpacity(0.02),
+            color: const Color(0xFF0F172A).withValues(alpha: 0.02),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -682,9 +691,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.12),
+            color: color.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: color.withOpacity(0.2)),
+            border: Border.all(color: color.withValues(alpha: 0.2)),
           ),
           child: Text(
             _translateStatus(status).toUpperCase(),

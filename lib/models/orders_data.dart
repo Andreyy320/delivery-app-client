@@ -42,8 +42,6 @@ class OrdersService {
     });
   }
 
-
-
   static double calculateTaxiPrice({required double distanceKm, required int durationMin}) {
     const double baseFee = 15.0;
     const double ratePerKm = 5.85;
@@ -62,7 +60,6 @@ class OrdersService {
     return rawPrice;
   }
 
-
   // Добавление заказа
   static Future<void> addOrder(
       String userId,
@@ -70,8 +67,9 @@ class OrdersService {
         required String restaurantName,
         required String shopId,
         required String category,
+        String type = '', // 🔹 Добавили параметр типа заказа (по умолчанию 'food')
         String comment = '', // Комментарий курьеру
-        String restaurantComment = '', // Комментарий для заведения
+        String restaurantComment = 'standard_order ', // Комментарий для заведения
         String paymentMethod = 'cash',
         double? lat,
         double? lng,
@@ -79,8 +77,12 @@ class OrdersService {
         double itemsPrice = 0.0,    // Сумма товаров (для заведения)
         double deliveryPrice = 0.0, // Сумма доставки (для курьера)
         double totalPrice = 0.0,    // Общая сумма (для клиента)
-        double distanceKm = 0.0,    // 🔹 НОВОЕ: Расстояние в км
-        int durationMin = 0,        // 🔹 НОВОЕ: Время в пути в минутах
+        double distanceKm = 0.0,    // Расстояние в км
+        int durationMin = 0,        // Время в пути в минутах
+        // Данные заведения (откуда забирать):
+        String restaurantAddress = '',
+        double restaurantLat = 0.0,
+        double restaurantLng = 0.0,
       }) async {
     final userDoc = await _firestore.collection('users').doc(userId).get();
     final clientName = userDoc.data()?['name'] ?? 'Без имени';
@@ -100,6 +102,7 @@ class OrdersService {
       'shopId': shopId,
       'restaurantName': restaurantName,
       'category': category,
+      'type': type, // 🔹 Сохраняем тип заказа в базу данных
       'items': cart.map((item) => {
         'name': item.dish.name,
         'price': item.dish.price,
@@ -110,10 +113,10 @@ class OrdersService {
       }).toList(),
 
       'itemsPrice': itemsPrice,
-      'deliveryPrice': finalDeliveryPrice, // 🔹 Записываем рассчитанную по формуле цену
-      'total': finalTotal,                 // 🔹 Общая сумма с учетом товаров и доставки
-      'distance_km': distanceKm,           // 🔹 Сохраняем километраж для карточки курьера
-      'duration_min': durationMin,         // 🔹 Сохраняем время в пути
+      'deliveryPrice': finalDeliveryPrice, // Записываем рассчитанную по формуле цену
+      'total': finalTotal,                 // Общая сумма с учетом товаров и доставки
+      'distance_km': distanceKm,           // Сохраняем километраж для карточки курьера
+      'duration_min': durationMin,         // Сохраняем время в пути
 
       'paymentMethod': paymentMethod,
       'comment': comment,
@@ -125,6 +128,11 @@ class OrdersService {
       'clientLat': lat,
       'clientLng': lng,
       'clientAddress': address ?? 'Точка доставки',
+
+      // Сохраняем данные заведения, чтобы курьер видел адрес и координаты точки забора
+      'restaurantAddress': restaurantAddress,
+      'restaurantLat': restaurantLat,
+      'restaurantLng': restaurantLng,
 
       // Дублируем структуру location, чтобы модель Order.fromFirestore читала её без ошибок
       'deliveryLocation': {

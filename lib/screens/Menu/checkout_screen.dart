@@ -11,7 +11,6 @@ import '../../models/orders_data.dart';
 import '../Menu/Cart_data.dart';
 import '../../models/order_model.dart';
 
-
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -82,7 +81,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (user != null) {
       userId = user.uid;
       String? effectiveShopId = (widget.shopId == "" || widget.shopId == "null" || widget.shopId == "combined") ? null : widget.shopId;
+
+      // 1. Пробуем получить корзину для конкретного магазина
       cartNotifier = getCart(userId!, effectiveShopId);
+
+      // 2. 🛡️ Страховка: если магазин передал пустую корзину, но в общем стейте есть товары — подтягиваем их!
+      if (cartNotifier.value.isEmpty) {
+        debugPrint('⚠️ Внимание: по shopId "$effectiveShopId" корзина пуста. Проверяем общую корзину...');
+        cartNotifier = getCart(userId!, null); // Пробуем взять без фильтра по shopId
+      }
+
       cartNotifier.addListener(() {
         if (mounted) {
           setState(() {});
@@ -153,14 +161,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         double roadDistanceKm = (route['distance'] as num).toDouble() / 1000.0;
         double travelTimeMin = (route['duration'] as num).toDouble() / 60.0;
 
-        // 🔹 Считаем цену через единый метод в OrdersService, чтобы на экране и в заказе всё было одинаково!
+        // 🔹 Считаем цену через единый метод в OrdersService
         double calculatedPrice = OrdersService.calculateTaxiPrice(
           distanceKm: roadDistanceKm,
           durationMin: travelTimeMin.round(),
         );
 
         setState(() {
-          _roadDistanceKm = roadDistanceKm; // Сохраняем километры для вывода
+          _roadDistanceKm = roadDistanceKm;
           _deliveryPrice = calculatedPrice;
           _estimatedMinutes = travelTimeMin.round();
         });
@@ -205,8 +213,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       return;
     }
     try {
+      // 1. Получаем данные магазина (включая координаты, адрес и категорию) из Firestore
       final shopDoc = await FirebaseFirestore.instance.collection('categories').doc(widget.shopId).get();
-      final String shopCategory = shopDoc.data()?['category'] ?? 'store';
+      final shopData = shopDoc.data();
+
+      final String shopCategory = shopData?['category'] ?? 'store';
+      final String restaurantAddress = shopData?['address'] ?? shopData?['pickupAddress'] ?? 'Адрес заведения не указан';
+
+      // Достаем координаты заведения (с дефолтными значениями на крайний случай)
+      final double restaurantLat = (shopData?['lat'] as num?)?.toDouble() ?? 46.8410;
+      final double restaurantLng = (shopData?['lng'] as num?)?.toDouble() ?? 29.6470;
 
       final String finalAddress = _deliveryAddressName ?? 'Точка доставки';
 
@@ -217,12 +233,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       double deliveryPrice = _deliveryPrice.roundToDouble();
       double totalOrderPrice = itemsPrice + deliveryPrice + _tariffExtraFee;
 
-      // Передаем координаты, адрес и дистанцию в метод сохранения заказа
+      // 2. Передаем координаты и адрес заведения вместе с заказом (тип теперь передается корректно как 'type')
       await OrdersService.addOrder(
-        userId!, cartNotifier.value,
+        userId!,
+        cartNotifier.value,
         restaurantName: widget.restaurantName,
         shopId: widget.shopId,
         category: shopCategory,
+        type: 'standard_order', // 🔹 Передаем тип заказа
         comment: _comment,
         restaurantComment: _restaurantComment,
         paymentMethod: _selectedPayment,
@@ -232,8 +250,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         itemsPrice: itemsPrice,
         deliveryPrice: deliveryPrice,
         totalPrice: totalOrderPrice,
-        distanceKm: _roadDistanceKm, // 🔹 Передаем километры в метод заказа
+        distanceKm: _roadDistanceKm,
         durationMin: _estimatedMinutes,
+        // 🔹 Передаем данные заведения, чтобы курьеру сразу пришел адрес и координаты:
+        restaurantAddress: restaurantAddress,
+        restaurantLat: restaurantLat,
+        restaurantLng: restaurantLng,
       );
 
       String? effectiveShopId = (widget.shopId == "" || widget.shopId == "null" || widget.shopId == "combined") ? null : widget.shopId;
@@ -742,46 +764,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             SizedBox(
               width: double.infinity,
               height: 54,
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+              child: ElevatedButton(
+                onPressed: _saveOrder,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0F172A),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF0F172A).withValues(alpha: 0.25),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    )
-                  ],
+                  elevation: 0,
                 ),
-                child: ElevatedButton(
-                  onPressed: _requiresDispatcher ? () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Требуется звонок диспетчера'),
-                        content: const Text('Габариты или вес заказа превышают стандартные лимиты службы «15-17». Наш диспетчер свяжется с вами для согласования доставки.'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('Понятно'),
-                          ),
-                        ],
-                      ),
-                    );
-                  } : _saveOrder,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  child: Text(
-                    _requiresDispatcher ? 'СОГЛАСОВАТЬ С ДИСПЕТЧЕРОМ' : 'ОФОРМИТЬ ЗАКАЗ',
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: 0.8, color: Colors.white),
+                child: const Text(
+                  'Оформить заказ',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
