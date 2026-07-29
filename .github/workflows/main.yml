@@ -11,12 +11,13 @@ jobs:
         with:
           channel: 'stable'
 
-      # Устанавливаем NDK и CMake через sdkmanager
       - name: Install Android NDK and CMake
         run: |
           echo "y" | sudo ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.0.12077973" "cmake;3.22.1"
 
       - name: Build APK
+        env:
+          HOME: /tmp  # Перенаправляем домашнюю директорию в доступную для записи папки /tmp
         run: |
           flutter pub get
           flutter build apk --release
