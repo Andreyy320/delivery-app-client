@@ -5,6 +5,12 @@ on: [push, workflow_dispatch]
 jobs:
   build_android:
     runs-on: ubuntu-latest
+    
+    # Добавляем переменные окружения, чтобы Gradle успешно создал ключи подписи во временной папке
+    env:
+      HOME: /tmp
+      ANDROID_USER_HOME: /tmp/.android
+
     steps:
       - uses: actions/checkout@v4
       
