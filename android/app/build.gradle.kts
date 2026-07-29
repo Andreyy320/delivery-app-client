@@ -45,10 +45,12 @@ android {
             // Подписываем релиз дебажным ключом, чтобы APK без проблем ставился на телефон
             signingConfig = signingConfigs.getByName("debug")
 
-            minifyEnabled = false
-            shrinkResources = false
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
+}
+
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
 }
