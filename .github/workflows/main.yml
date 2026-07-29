@@ -17,7 +17,7 @@ jobs:
 
       - name: Build APK
         env:
-          HOME: /tmp  # Перенаправляем домашнюю директорию в доступную для записи папки /tmp
+          HOME: /tmp  # Решает проблему с недоступной папкой .android
         run: |
           flutter pub get
           flutter build apk --release
