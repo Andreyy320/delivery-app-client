@@ -42,12 +42,13 @@ android {
 
     buildTypes {
         release {
-            // Убрана принудительная подпись дебажным ключом,
-            // чтобы GitHub Actions мог спокойно собрать релизный APK
+            // Подписываем релиз дебажным ключом, чтобы APK без проблем ставился на телефон
+            signingConfig = signingConfigs.getByName("debug")
+
+            minifyEnabled = false
+            shrinkResources = false
         }
     }
-}
-
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
 }
