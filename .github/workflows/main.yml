@@ -11,8 +11,10 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Install Android NDK
-        run: echo "y" | sudo ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.0.12077973"
+      # Устанавливаем NDK и CMake через sdkmanager
+      - name: Install Android NDK and CMake
+        run: |
+          echo "y" | sudo ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.0.12077973" "cmake;3.22.1"
 
       - name: Build APK
         run: |
