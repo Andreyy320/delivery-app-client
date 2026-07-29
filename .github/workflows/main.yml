@@ -15,15 +15,13 @@ jobs:
         run: |
           echo "y" | sudo ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.0.12077973" "cmake;3.22.1"
 
-      - name: Build APK
-        env:
-          HOME: /tmp  # Решает проблему с недоступной папкой .android
+      - name: Build APK (Debug)
         run: |
           flutter pub get
-          flutter build apk --release
+          flutter build apk --debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: delivery_app_android
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
