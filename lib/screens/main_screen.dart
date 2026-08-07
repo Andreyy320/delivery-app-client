@@ -98,7 +98,8 @@ class _MainScreenState extends State<MainScreen> {
 
         // ИЗМЕНЕНИЕ: Если статус требует действия, мы не должны его пропускать,
         // даже если заказ был создан до запуска приложения!
-        if (change.type == DocumentChangeType.added && status != 'action_required') {
+        if (change.type == DocumentChangeType.added &&
+            status != 'action_required') {
           if (timestamp != null) {
             DateTime orderTime = timestamp.toDate();
             if (_appStartTime != null && orderTime.isBefore(_appStartTime!)) {
@@ -134,6 +135,7 @@ class _MainScreenState extends State<MainScreen> {
       }
     });
   }
+
   void _triggerNotification(String status) {
     final Map<String, List<String>> notifications = {
       'new': ["Заказ создан 📝", "Заказ успешно оформлен."],
@@ -144,7 +146,10 @@ class _MainScreenState extends State<MainScreen> {
       'inProgress': ["В пути 🛵", "Курьер скоро будет!"],
       'delivered': ["Доставлен ✨", "Приятного аппетита!"],
       'cancelled': ["Отменен ❌", "Заказ был отменен."],
-      'action_required': ["Требуется действие ⚠️", "Заведение предлагает замену товара."],
+      'action_required': [
+        "Требуется действие ⚠️",
+        "Заведение предлагает замену товара."
+      ],
     };
 
     if (notifications.containsKey(status)) {
@@ -153,7 +158,8 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  /// Карточка отображения конкретной замены без красного крестика (только фото)
+
+  /// Карточка отображения конкретной замены (с поддержкой размеров, модификаторов и количества)
   Widget _buildItemReplacementCard({
     required String oldName,
     required String newName,
@@ -161,7 +167,23 @@ class _MainScreenState extends State<MainScreen> {
     String? newImage,
     num? oldPrice,
     num? newPrice,
+    int oldQty = 1,
+    int newQty = 1,
+    String? oldSize,
+    String? newSize,
+    List<dynamic>? oldModifiers,
+    List<dynamic>? newModifiers,
   }) {
+    final List<String> oldModNames = (oldModifiers ?? [])
+        .map((m) => (m is Map ? m['name'] : m).toString())
+        .where((n) => n.isNotEmpty)
+        .toList();
+
+    final List<String> newModNames = (newModifiers ?? [])
+        .map((m) => (m is Map ? m['name'] : m).toString())
+        .where((n) => n.isNotEmpty)
+        .toList();
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -172,7 +194,7 @@ class _MainScreenState extends State<MainScreen> {
       ),
       child: Column(
         children: [
-          // Нет в наличии - выводим фото товара
+          // --- 1. СТАРЫЙ ТОВАР (Закончился) ---
           Row(
             children: [
               ClipRRect(
@@ -183,18 +205,21 @@ class _MainScreenState extends State<MainScreen> {
                   width: 44,
                   height: 44,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    width: 44,
-                    height: 44,
-                    color: Colors.grey.shade200,
-                    child: const Icon(Icons.fastfood, size: 24, color: Colors.grey),
-                  ),
+                  errorBuilder: (_, __, ___) =>
+                      Container(
+                        width: 44,
+                        height: 44,
+                        color: Colors.grey.shade200,
+                        child: const Icon(
+                            Icons.fastfood, size: 24, color: Colors.grey),
+                      ),
                 )
                     : Container(
                   width: 44,
                   height: 44,
                   color: Colors.grey.shade200,
-                  child: const Icon(Icons.fastfood, size: 24, color: Colors.grey),
+                  child: const Icon(
+                      Icons.fastfood, size: 24, color: Colors.grey),
                 ),
               ),
               const SizedBox(width: 12),
@@ -204,28 +229,62 @@ class _MainScreenState extends State<MainScreen> {
                   children: [
                     Text(
                       'Закончился:',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[600], fontWeight: FontWeight.w500),
+                      style: TextStyle(fontSize: 11,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500),
                     ),
-                    Text(
-                      oldName,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey,
-                        decoration: TextDecoration.lineThrough,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '$oldName ($oldQty шт.)',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey,
+                              decoration: TextDecoration.lineThrough,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (oldSize != null && oldSize.isNotEmpty) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              oldSize,
+                              style: TextStyle(fontSize: 10,
+                                  color: Colors.grey.shade700,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ]
+                      ],
+                    ),
+                    if (oldModNames.isNotEmpty)
+                      Text(
+                        'Допы: ${oldModNames.join(', ')}',
+                        style: const TextStyle(
+                            fontSize: 11, color: Colors.grey),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
                   ],
                 ),
               ),
               if (oldPrice != null)
                 Text(
-                  '${oldPrice.toInt()} ₽',
-                  style: const TextStyle(color: Colors.grey),
+                  '${(oldPrice * oldQty).toInt()} Руб',
+                  style: const TextStyle(color: Colors.grey, fontSize: 13),
                 ),
             ],
           ),
 
+          // --- РАЗДЕЛИТЕЛЬ ---
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
             child: Row(
@@ -233,14 +292,16 @@ class _MainScreenState extends State<MainScreen> {
                 Expanded(child: Divider(color: Color(0xFFE2E8F0))),
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: 8),
-                  child: Icon(Icons.arrow_downward_rounded, color: Colors.deepOrange, size: 20),
+                  child: Icon(
+                      Icons.arrow_downward_rounded, color: Colors.deepOrange,
+                      size: 20),
                 ),
                 Expanded(child: Divider(color: Color(0xFFE2E8F0))),
               ],
             ),
           ),
 
-          // Предлагаемая замена - выводим фото товара
+          // --- 2. НОВЫЙ ТОВАР (Предлагаем взамен) ---
           Row(
             children: [
               ClipRRect(
@@ -251,18 +312,21 @@ class _MainScreenState extends State<MainScreen> {
                   width: 44,
                   height: 44,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    width: 44,
-                    height: 44,
-                    color: Colors.orange.shade50,
-                    child: const Icon(Icons.fastfood, size: 24, color: Colors.deepOrange),
-                  ),
+                  errorBuilder: (_, __, ___) =>
+                      Container(
+                        width: 44,
+                        height: 44,
+                        color: Colors.orange.shade50,
+                        child: const Icon(
+                            Icons.fastfood, size: 24, color: Colors.deepOrange),
+                      ),
                 )
                     : Container(
                   width: 44,
                   height: 44,
                   color: Colors.orange.shade50,
-                  child: const Icon(Icons.fastfood, size: 24, color: Colors.deepOrange),
+                  child: const Icon(
+                      Icons.fastfood, size: 24, color: Colors.deepOrange),
                 ),
               ),
               const SizedBox(width: 12),
@@ -272,23 +336,60 @@ class _MainScreenState extends State<MainScreen> {
                   children: [
                     const Text(
                       'Предлагаем взамен:',
-                      style: TextStyle(fontSize: 11, color: Colors.deepOrange, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontSize: 11,
+                          color: Colors.deepOrange,
+                          fontWeight: FontWeight.bold),
                     ),
-                    Text(
-                      newName,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '$newName ($newQty шт.)',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F172A),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (newSize != null && newSize.isNotEmpty) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade50,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.orange.shade200),
+                            ),
+                            child: Text(
+                              newSize,
+                              style: const TextStyle(fontSize: 10,
+                                  color: Colors.deepOrange,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ]
+                      ],
+                    ),
+                    if (newModNames.isNotEmpty)
+                      Text(
+                        'Допы: ${newModNames.join(', ')}',
+                        style: const TextStyle(fontSize: 11,
+                            color: Colors.deepOrange,
+                            fontWeight: FontWeight.w500),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
                   ],
                 ),
               ),
               if (newPrice != null)
                 Text(
-                  '${newPrice.toInt()} ₽',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A)),
+                  '${(newPrice * newQty).toInt()} Руб',
+                  style: const TextStyle(fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: Color(0xFF0F172A)),
                 ),
             ],
           ),
@@ -312,13 +413,18 @@ class _MainScreenState extends State<MainScreen> {
       // Фолбэк парсинга
       replacementItems.add({
         'oldItemName': data['oldItemName'] ?? data['outOfStockItem'] ?? 'Товар',
-        'newItemName': data['newItemName'] ?? data['replacementItem'] ?? 'Альтернативный товар',
+        'newItemName': data['newItemName'] ?? data['replacementItem'] ??
+            'Альтернативный товар',
         'oldItemImage': data['oldItemImage'] ?? data['oldImage'],
         'newItemImage': data['newItemImage'] ?? data['newImage'],
         'oldPrice': data['oldPrice'],
         'newPrice': data['newPrice'],
         'oldQuantity': data['oldQuantity'] ?? 1,
         'newQuantity': data['newQuantity'] ?? 1,
+        'oldSize': data['oldSize'] ?? '',
+        'newSize': data['newSize'] ?? '',
+        'oldModifiers': data['oldModifiers'] ?? [],
+        'newModifiers': data['newModifiers'] ?? [],
       });
     }
 
@@ -384,18 +490,27 @@ class _MainScreenState extends State<MainScreen> {
                   // Выводим список заменяемых позиций
                   ...replacementItems.map((item) {
                     return _buildItemReplacementCard(
-                      oldName: item['oldItemName'] ?? item['oldName'] ?? 'Товар',
-                      newName: item['newItemName'] ?? item['newItemName'] ?? 'Замена',
+                      oldName: item['oldItemName'] ?? item['oldName'] ??
+                          'Товар',
+                      newName: item['newItemName'] ?? item['newName'] ??
+                          'Замена',
                       oldImage: item['oldItemImage'] ?? item['oldImage'],
                       newImage: item['newItemImage'] ?? item['newImage'],
                       oldPrice: item['oldPrice'],
                       newPrice: item['newPrice'],
+                      oldQty: (item['oldQuantity'] ?? 1) as int,
+                      newQty: (item['newQuantity'] ?? 1) as int,
+                      oldSize: item['oldSize'],
+                      newSize: item['newSize'],
+                      oldModifiers: item['oldModifiers'] as List?,
+                      newModifiers: item['newModifiers'] as List?,
                     );
                   }),
 
                   const SizedBox(height: 20),
                   Row(
                     children: [
+                      // --- КНОПКА ОТМЕНЫ ЗАКАЗА ---
                       Expanded(
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(
@@ -410,15 +525,19 @@ class _MainScreenState extends State<MainScreen> {
                             await orderDoc.reference.update({
                               'status': 'cancelled',
                               'cancelReason': 'Отказ от замены',
+                              'updatedAt': FieldValue.serverTimestamp(),
                             });
                           },
                           child: const Text(
                             'Отменить заказ',
-                            style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+                            style: TextStyle(color: Colors.redAccent,
+                                fontWeight: FontWeight.bold),
                           ),
                         ),
                       ),
                       const SizedBox(width: 12),
+
+                      // --- КНОПКА ПРИНЯТИЯ ЗАМЕНЫ ---
                       Expanded(
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
@@ -429,66 +548,110 @@ class _MainScreenState extends State<MainScreen> {
                               borderRadius: BorderRadius.circular(16),
                             ),
                           ),
-
-
-
                           onPressed: () async {
                             Navigator.pop(sheetContext);
 
-                            // 1. Берем текущие товары из заказа
+                            // 1. Копируем исходный список товаров из заказа
                             List<Map<String, dynamic>> currentItems = List.from(
-                              (data['items'] ?? []).map((item) => Map<String, dynamic>.from(item)),
+                              (data['items'] ?? []).map((item) =>
+                              Map<String, dynamic>.from(item as Map)),
                             );
 
-                            // 2. Обрабатываем актуальную замену из списка
+                            List<Map<String, dynamic>> itemsToAdd = [];
+
+                            // 2. Фаза 1: Помечаем старые товары на удаление/уменьшение количества БЕЗ сдвига индексов
                             if (replacementItems.isNotEmpty) {
                               for (var replacement in replacementItems) {
-                                // Собираем все возможные варианты названий старого товара для надежного удаления
-                                final possibleOldNames = [
-                                  replacement['oldItemName'],
-                                  replacement['oldName'],
-                                  replacement['old'],
-                                ].where((n) => n != null).map((n) => n.toString().trim().toLowerCase()).toList();
+                                final int? targetIndex = replacement['itemIndex'] as int?;
+                                final int oldQtyToRemove = (replacement['oldQuantity'] ??
+                                    1) as int;
 
-                                // УДАЛЯЕМ ВСЕ совпадения со старым товаром из списка
-                                if (possibleOldNames.isNotEmpty) {
-                                  currentItems.removeWhere((item) {
-                                    final itemName = (item['name'] ?? '').toString().trim().toLowerCase();
-                                    return possibleOldNames.contains(itemName);
-                                  });
+                                // Пытаемся обработать по точечному индексу из Firestore
+                                if (targetIndex != null && targetIndex >= 0 &&
+                                    targetIndex < currentItems.length) {
+                                  int currentQty = (currentItems[targetIndex]['quantity'] ??
+                                      1) as int;
+                                  if (currentQty <= oldQtyToRemove) {
+                                    currentItems[targetIndex]['_toRemove'] =
+                                    true;
+                                  } else {
+                                    currentItems[targetIndex]['quantity'] =
+                                        currentQty - oldQtyToRemove;
+                                  }
+                                } else {
+                                  // Если индекса нет, ищем первый подходящий товар по имени
+                                  final oldNameStr = (replacement['oldItemName'] ??
+                                      replacement['oldName'] ?? '')
+                                      .toString()
+                                      .trim()
+                                      .toLowerCase();
+                                  if (oldNameStr.isNotEmpty) {
+                                    final idx = currentItems.indexWhere((
+                                        item) =>
+                                    item['_toRemove'] != true &&
+                                        (item['name'] ?? '')
+                                            .toString()
+                                            .trim()
+                                            .toLowerCase() == oldNameStr
+                                    );
+                                    if (idx != -1) {
+                                      int currentQty = (currentItems[idx]['quantity'] ??
+                                          1) as int;
+                                      if (currentQty <= oldQtyToRemove) {
+                                        currentItems[idx]['_toRemove'] = true;
+                                      } else {
+                                        currentItems[idx]['quantity'] =
+                                            currentQty - oldQtyToRemove;
+                                      }
+                                    }
+                                  }
                                 }
 
-                                // Добавляем новый товар
-                                final newName = (replacement['newItemName'] ?? replacement['newName'] ?? '').toString().trim();
-                                final newPrice = replacement['newPrice'] ?? 0;
-                                final newImage = replacement['newItemImage'] ?? replacement['newImage'] ?? '';
-                                final newQtyToAdd = (replacement['newQuantity'] ?? 1) as int;
+                                // Готовим новый товар к добавлению
+                                final String newName = (replacement['newItemName'] ??
+                                    replacement['newName'] ?? '')
+                                    .toString()
+                                    .trim();
+                                final num newPrice = replacement['newPrice'] ??
+                                    0;
+                                final String newImage = replacement['newItemImage'] ??
+                                    replacement['newImage'] ?? '';
+                                final int newQtyToAdd = (replacement['newQuantity'] ??
+                                    1) as int;
+                                final String newSizeStr = replacement['newSize'] ??
+                                    '';
+                                final List newModsList = replacement['newModifiers'] as List? ??
+                                    [];
 
                                 if (newName.isNotEmpty) {
-                                  // Проверяем, есть ли уже такой новый товар в списке
-                                  final existingIndex = currentItems.indexWhere((item) {
-                                    final itemName = (item['name'] ?? '').toString().trim().toLowerCase();
-                                    return itemName == newName.toLowerCase();
-                                  });
+                                  Map<String, dynamic> newItem = {
+                                    'name': newName,
+                                    'price': newPrice,
+                                    'quantity': newQtyToAdd,
+                                    'imagePath': newImage,
+                                    'imageUrl': newImage,
+                                  };
 
-                                  if (existingIndex != -1) {
-                                    // Если есть — просто увеличиваем количество, чтобы не плодить дубликаты
-                                    int existingQty = (currentItems[existingIndex]['quantity'] ?? 1) as int;
-                                    currentItems[existingIndex]['quantity'] = existingQty + newQtyToAdd;
-                                  } else {
-                                    // Если нет — добавляем ровно 1 раз
-                                    currentItems.add({
-                                      'name': newName,
-                                      'price': newPrice,
-                                      'quantity': newQtyToAdd,
-                                      'imagePath': newImage,
-                                    });
+                                  if (newSizeStr.isNotEmpty) {
+                                    newItem['selectedSize'] = newSizeStr;
+                                    newItem['size'] = newSizeStr;
                                   }
+
+                                  if (newModsList.isNotEmpty) {
+                                    newItem['modifiers'] = newModsList;
+                                  }
+
+                                  itemsToAdd.add(newItem);
                                 }
                               }
                             }
 
-                            // 3. Пересчитываем общую стоимость товаров
+                            // 3. Фаза 2: Безопасно чистим полностью замененные позиций и добавляем новые
+                            currentItems.removeWhere((
+                                item) => item['_toRemove'] == true);
+                            currentItems.addAll(itemsToAdd);
+
+                            // 4. Пересчитываем итоговые суммы
                             num newItemsPrice = 0;
                             for (var item in currentItems) {
                               final price = (item['price'] ?? 0) as num;
@@ -496,23 +659,25 @@ class _MainScreenState extends State<MainScreen> {
                               newItemsPrice += price * qty;
                             }
 
-                            final deliveryPrice = (data['deliveryPrice'] ?? data['deliveryCost'] ?? 0) as num;
+                            final deliveryPrice = (data['deliveryPrice'] ??
+                                data['deliveryCost'] ?? 0) as num;
                             final newTotal = newItemsPrice + deliveryPrice;
 
-                            // 4. Обновляем документ в Firestore
+                            // 5. Обновляем документ в Firestore
                             await orderDoc.reference.update({
                               'status': 'zamena',
                               'replacementAccepted': true,
                               'items': currentItems,
                               'itemsPrice': newItemsPrice,
-                              'totalPrice': newItemsPrice,
+                              'totalPrice': newTotal,
                               'total': newTotal,
                               'updatedAt': FieldValue.serverTimestamp(),
                             });
                           },
                           child: const Text(
                             'Принять замену',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            style: TextStyle(color: Colors.white,
+                                fontWeight: FontWeight.bold),
                           ),
                         ),
                       ),
@@ -529,13 +694,15 @@ class _MainScreenState extends State<MainScreen> {
     });
   }
 
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-        final NavigatorState? navigator = _navigatorKeys[_currentIndex].currentState;
+        final NavigatorState? navigator = _navigatorKeys[_currentIndex]
+            .currentState;
         if (navigator != null && navigator.canPop()) {
           navigator.pop();
         }
@@ -545,7 +712,7 @@ class _MainScreenState extends State<MainScreen> {
         body: IndexedStack(
           index: _currentIndex,
           children: [
-            _buildTabNavigator(0, const CategoriesPage()),
+            _buildTabNavigator(0, const RestaurantsPage()),
             _buildTabNavigator(
               1,
               ValueListenableBuilder<String?>(
@@ -571,10 +738,18 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _buildCustomFloatingNavBar(bool isLoggedIn) {
     final items = [
-      _NavBarItemData(activeIcon: Icons.home_rounded, inactiveIcon: Icons.home_outlined, label: 'Главная'),
-      _NavBarItemData(activeIcon: Icons.shopping_bag_rounded, inactiveIcon: Icons.shopping_bag_outlined, label: 'Корзина'),
-      _NavBarItemData(activeIcon: Icons.receipt_long_rounded, inactiveIcon: Icons.receipt_long_outlined, label: 'Заказы'),
-      _NavBarItemData(activeIcon: Icons.person_rounded, inactiveIcon: Icons.person_outline_rounded, label: 'Профиль'),
+      _NavBarItemData(activeIcon: Icons.home_rounded,
+          inactiveIcon: Icons.home_outlined,
+          label: 'Главная'),
+      _NavBarItemData(activeIcon: Icons.shopping_bag_rounded,
+          inactiveIcon: Icons.shopping_bag_outlined,
+          label: 'Корзина'),
+      _NavBarItemData(activeIcon: Icons.receipt_long_rounded,
+          inactiveIcon: Icons.receipt_long_outlined,
+          label: 'Заказы'),
+      _NavBarItemData(activeIcon: Icons.person_rounded,
+          inactiveIcon: Icons.person_outline_rounded,
+          label: 'Профиль'),
     ];
 
     return Container(
@@ -680,127 +855,139 @@ class _MainScreenState extends State<MainScreen> {
     showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(32),
-            border: Border.all(color: Colors.black.withOpacity(0.05)),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF0F172A).withOpacity(0.18),
-                blurRadius: 30,
-                offset: const Offset(0, 15),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 70,
-                height: 70,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF6366F1),
-                      Color(0xFF4F46E5),
-                    ],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF6366F1).withOpacity(0.35),
-                      blurRadius: 16,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.lock_outline_rounded,
-                  color: Colors.white,
-                  size: 32,
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Требуется вход',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF0F172A),
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Чтобы отслеживать статус доставки и видеть историю заказов, войдите в свой профиль.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  height: 1.4,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF64748B),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: const Text(
-                        'Позже',
-                        style: TextStyle(
-                          color: Color(0xFF94A3B8),
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        setState(() => _currentIndex = 3);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F172A),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: const Text(
-                        'Войти',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
+      builder: (context) =>
+          Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(32),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0F172A).withValues(alpha: 0.12),
+                    blurRadius: 30,
+                    offset: const Offset(0, 15),
                   ),
                 ],
               ),
-            ],
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFFF8FAFC),
+                      border: Border.all(
+                        color: const Color(0xFFE2E8F0),
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF0F172A).withValues(
+                              alpha: 0.05),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.lock_outline_rounded,
+                      color: Color(0xFF0F172A),
+                      size: 30,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Требуется вход',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF0F172A),
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Чтобы отслеживать статус доставки и видеть историю заказов, войдите в свой профиль.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.4,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: const Text(
+                            'Позже',
+                            style: TextStyle(
+                              color: Color(0xFF94A3B8),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF0F172A).withValues(
+                                    alpha: 0.15),
+                                blurRadius: 12,
+                                offset: const Offset(0, 5),
+                              ),
+                            ],
+                          ),
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              setState(() => _currentIndex = 3);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0F172A),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: const Text(
+                              'Войти',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
-      ),
     );
   }
 }

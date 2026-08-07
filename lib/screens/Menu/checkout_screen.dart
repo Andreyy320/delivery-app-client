@@ -1,1162 +1,1192 @@
 import 'dart:async';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
-import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
-import 'package:firebase_auth/firebase_auth.dart';
-import '../../models/dish_model.dart';
-import '../../models/orders_data.dart';
-import '../Menu/Cart_data.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart' hide Path; // 👈 Скрыли Path, чтобы не было конфликта
+import '../../Api_Servicess.dart'; // Сервисный класс с API
+import '../../models/Search_Address.dart';
 import '../../models/order_model.dart';
+import 'Cart_data.dart';
 
-import 'dart:async';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
-import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
-import 'package:firebase_auth/firebase_auth.dart';
-import '../../models/dish_model.dart';
-import '../../models/orders_data.dart';
-import '../Menu/Cart_data.dart';
-import '../../models/order_model.dart';
-
+// ============================================================================
+// ЭКРАН ОФОРМЛЕНИЯ ЗАКАЗА И ВЫБОРА АДРЕСА НА КАРТЕ
+// ============================================================================
 class CheckoutScreen extends StatefulWidget {
   final String shopId;
   final Function(Order)? onOrderPlaced;
   final String restaurantName;
+  final String apiToken; // Токен для запросов к api.99993.ru
+  final int groupId; // ID службы/груп группы доставки
+  final double productsTotal;
+  final List<CartItem> cartItems;
+  // 🔹 КООРДИНАТЫ РЕСТОРАНА (поддерживаются как double 46.83, так и микроградусы int 46838444)
+  final double restaurantLat;
+  final double restaurantLng;
 
   const CheckoutScreen({
     super.key,
     required this.shopId,
     this.onOrderPlaced,
     required this.restaurantName,
+    required this.apiToken,
+    required this.cartItems,
+    required this.productsTotal,
+    required this.restaurantLat,
+    required this.restaurantLng,
+    this.groupId = 1,
   });
 
   @override
   State<CheckoutScreen> createState() => _CheckoutScreenState();
 }
 
+// ============================================================================
+// СОСТОЯНИЕ ЭКРАНА С ЛОГИКОЙ КАРТЫ И АДРЕСНОГО СЕРВИСА
+// ============================================================================
 class _CheckoutScreenState extends State<CheckoutScreen> {
+  // --- КОНТРОЛЛЕР КАРТЫ ---
   final MapController _mapController = MapController();
 
-  LatLng? _deliveryLocation;
-  String? _deliveryAddressName; // Название улицы/адреса для отображения
-  LatLng? _restaurantLocation;
+  // --- КООРДИНАТЫ ЦЕНТРА КАРТЫ (Адрес доставки) ---
+  LatLng _currentCenter = const LatLng(46.8410, 29.6470);
+
+  // --- ДАННЫЕ АДРЕСА РЕСТОРАНА ИЗ API ---
+  int? _restaurantAddressId;
+  bool _isLocatingRestaurant = true;
+
+  // --- СОСТОЯНИЕ GPS И ОПРЕДЕЛЕНИЯ ГЕОПОЗИЦИИ ---
+  bool _isGettingLocation = false;
+
+  // --- ПОЗИЦИЯ МЕТКИ РЕСТОРАНА ДЛЯ КАРТЫ (стандартные double) ---
+  late LatLng _restaurantMapLatLng;
+
+  // --- СОСТОЯНИЕ АДРЕСА ДОСТАВКИ ИЗ МЕТКИ НА КАРТЕ ---
+  Map<String, dynamic>? _mapAddressData;
+  bool _isLoadingMapAddress = false;
+  Timer? _mapDebounceTimer;
+
+  // --- СОСТОЯНИЕ АДРЕСА ИЗ РУЧНОГО ПОИСКА ---
+  Map<String, dynamic>? _selectedAddressData;
+
+  // --- СОСТОЯНИЕ МАРШРУТА И СТОИМОСТИ ---
   List<LatLng> _routePoints = [];
-  double _deliveryPrice = 0.0;
-  int _estimatedMinutes = 0;
-  double _roadDistanceKm = 0.0; // 🔹 Храним точное расстояние в км для вывода
-  bool _isLoadingRoute = false;
+  Map<String, dynamic>? _routeData;
+  bool _isCalculatingRoute = false;
 
-  final String _logisticsTariff = 'Стандарт';
-  final double _tariffExtraFee = 0.0;
-  final bool _requiresDispatcher = false;
+  // 🔹 --- ПОЛЯ ДЛЯ ПОДЪЕЗДА, ЭТАЖА И КВАРТИРЫ ---
+  final TextEditingController _entranceController = TextEditingController();
+  final TextEditingController _floorController = TextEditingController();
+  final TextEditingController _apartmentController = TextEditingController();
+  final TextEditingController _intercomController = TextEditingController();
 
-  String _comment = '';
-  String _restaurantComment = '';
-  String _selectedPayment = 'online';
+  // 🔹 --- ПОЛЕ ДЛЯ КОММЕНТАРИЯ К ЗАВЕДЕНИЮ ---
+  final TextEditingController _commentController = TextEditingController();
 
-  late final ValueNotifier<List<CartItem>> cartNotifier;
-  String? userId;
-
-  final paymentOptions = [
+  // 🔹 --- ВАРИАНТЫ И ВЫБРАННЫЙ СПОСОБ ОПЛАТЫ ---
+  final List<Map<String, dynamic>> paymentOptions = [
     {'id': 'online', 'label': 'Онлайн', 'icon': Icons.payment_rounded},
     {'id': 'cash', 'label': 'Наличными', 'icon': Icons.payments_outlined},
     {'id': 'card', 'label': 'Клевер', 'icon': Icons.credit_card_rounded},
     {'id': 'qr', 'label': 'QR-код', 'icon': Icons.qr_code_scanner_rounded},
   ];
+  String _selectedPaymentMethod = 'online';
 
+  // --- ИНИЦИАЛИЗАЦИЯ СОСТОЯНИЯ ---
   @override
   void initState() {
     super.initState();
-    _loadInitialData();
+
+    // Преобразуем координаты ресторана для отображения маркерного знака на карте
+    final double mapLat = widget.restaurantLat.abs() > 90
+        ? widget.restaurantLat / 1000000.0
+        : widget.restaurantLat;
+    final double mapLng = widget.restaurantLng.abs() > 180
+        ? widget.restaurantLng / 1000000.0
+        : widget.restaurantLng;
+
+    _restaurantMapLatLng = LatLng(mapLat, mapLng);
+
+    debugPrint('=====================================================');
+    debugPrint('🚀 [DEBUG CHECKOUT] Старт экрана оформления');
+    debugPrint('📍 Сырые координаты ресторана из параметров: lat=${widget
+        .restaurantLat}, lng=${widget.restaurantLng}');
+    debugPrint('📍 Координаты ресторана для карты: $_restaurantMapLatLng');
+    debugPrint('=====================================================');
+
+    // ⚡ БЫСТРЫЙ ПАРАЛЛЕЛЬНЫЙ СТАРТ ИНИЦИАЛИЗАЦИИ
+    _fastInitScreen();
   }
 
-  void _loadInitialData() {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      userId = user.uid;
-      String? effectiveShopId = (widget.shopId == "" || widget.shopId == "null" || widget.shopId == "combined") ? null : widget.shopId;
-
-      // 1. Пробуем получить корзину для конкретного магазина
-      cartNotifier = getCart(userId!, effectiveShopId);
-
-      // 2. 🛡️ Страховка: если магазин передал пустую корзину, но в общем стейте есть товары — подтягиваем их!
-      if (cartNotifier.value.isEmpty) {
-        debugPrint('⚠️ Внимание: по shopId "$effectiveShopId" корзина пуста. Проверяем общую корзину...');
-        cartNotifier = getCart(userId!, null); // Пробуем взять без фильтра по shopId
-      }
-
-      cartNotifier.addListener(() {
-        if (mounted) {
-          setState(() {});
-        }
-      });
-    } else {
-      cartNotifier = ValueNotifier([]);
-    }
-  }
-
-  double get totalItemsPrice => cartNotifier.value.fold(0.0, (acc, item) => acc + item.dish.price * item.quantity);
-
-  Future<void> _addToHistory(LatLng location, String addressName) async {
-    if (userId == null) return;
-    final historyRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('address_history');
-
-    final existing = await historyRef.get();
-    bool exists = existing.docs.any((doc) {
-      double lat = (doc['lat'] as num).toDouble();
-      double lng = (doc['lng'] as num).toDouble();
-      return (lat - location.latitude).abs() < 0.0001 && (lng - location.longitude).abs() < 0.0001;
-    });
-
-    if (!exists) {
-      await historyRef.add({
-        'lat': location.latitude,
-        'lng': location.longitude,
-        'address': addressName, // Сохраняем текстовое название улицы
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    }
-  }
-
-  Future<void> _updateRouteAndMetrics(LatLng destination, {String? addressName}) async {
-    setState(() {
-      _isLoadingRoute = true;
-      _deliveryLocation = destination;
-      if (addressName != null) {
-        _deliveryAddressName = addressName;
-      }
-    });
-
-    try {
-      final shopDoc = await FirebaseFirestore.instance.collection('categories').doc(widget.shopId).get();
-      if (!shopDoc.exists || shopDoc.data()?['lat'] == null) {
-        _restaurantLocation = const LatLng(46.8410, 29.6470);
-      } else {
-        _restaurantLocation = LatLng((shopDoc.data()!['lat'] as num).toDouble(), (shopDoc.data()!['lng'] as num).toDouble());
-      }
-
-      final url = Uri.parse(
-          'https://router.project-osrm.org/route/v1/driving/'
-              '${_restaurantLocation!.longitude},${_restaurantLocation!.latitude};'
-              '${destination.longitude},${destination.latitude}?overview=full&geometries=geojson'
-      );
-
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final route = data['routes'][0];
-
-        final geometry = route['geometry']['coordinates'] as List;
-        _routePoints = geometry.map((coord) => LatLng((coord[1] as num).toDouble(), (coord[0] as num).toDouble())).toList();
-
-        double roadDistanceKm = (route['distance'] as num).toDouble() / 1000.0;
-        double travelTimeMin = (route['duration'] as num).toDouble() / 60.0;
-
-        // 🔹 Считаем цену через единый метод в OrdersService
-        double calculatedPrice = OrdersService.calculateTaxiPrice(
-          distanceKm: roadDistanceKm,
-          durationMin: travelTimeMin.round(),
-        );
-
-        setState(() {
-          _roadDistanceKm = roadDistanceKm;
-          _deliveryPrice = calculatedPrice;
-          _estimatedMinutes = travelTimeMin.round();
-        });
-
-        _mapController.fitCamera(
-          CameraFit.bounds(
-            bounds: LatLngBounds(_restaurantLocation!, _deliveryLocation!),
-            padding: const EdgeInsets.all(40),
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint("Ошибка маршрута: $e");
-    } finally {
-      setState(() => _isLoadingRoute = false);
-    }
-  }
-
-  Future<void> _pickDeliveryLocation() async {
-    final Map<String, dynamic>? result = await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const SelectLocationScreen()),
-    );
-    if (result != null && result['latLng'] != null) {
-      await _updateRouteAndMetrics(
-        result['latLng'] as LatLng,
-        addressName: result['address'] as String?,
-      );
-    }
-  }
-
-  Future<void> _saveOrder() async {
-    if (userId == null || _deliveryLocation == null || cartNotifier.value.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Выберите адрес доставки'),
-          backgroundColor: const Color(0xFFEF4444),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-      return;
-    }
-    try {
-      // 1. Получаем данные магазина (включая координаты, адрес и категорию) из Firestore
-      final shopDoc = await FirebaseFirestore.instance.collection('categories').doc(widget.shopId).get();
-      final shopData = shopDoc.data();
-
-      final String shopCategory = shopData?['category'] ?? 'store';
-      final String restaurantAddress = shopData?['address'] ?? shopData?['pickupAddress'] ?? 'Адрес заведения не указан';
-
-      // Достаем координаты заведения (с дефолтными значениями на крайний случай)
-      final double restaurantLat = (shopData?['lat'] as num?)?.toDouble() ?? 46.8410;
-      final double restaurantLng = (shopData?['lng'] as num?)?.toDouble() ?? 29.6470;
-
-      final String finalAddress = _deliveryAddressName ?? 'Точка доставки';
-
-      // Сохраняем в историю с названием улицы
-      await _addToHistory(_deliveryLocation!, finalAddress);
-
-      double itemsPrice = totalItemsPrice.roundToDouble();
-      double deliveryPrice = _deliveryPrice.roundToDouble();
-      double totalOrderPrice = itemsPrice + deliveryPrice + _tariffExtraFee;
-
-      // 2. Передаем координаты и адрес заведения вместе с заказом (тип теперь передается корректно как 'type')
-      await OrdersService.addOrder(
-        userId!,
-        cartNotifier.value,
-        restaurantName: widget.restaurantName,
-        shopId: widget.shopId,
-        category: shopCategory,
-        type: 'standard_order', // 🔹 Передаем тип заказа
-        comment: _comment,
-        restaurantComment: _restaurantComment,
-        paymentMethod: _selectedPayment,
-        lat: _deliveryLocation!.latitude,
-        lng: _deliveryLocation!.longitude,
-        address: finalAddress,
-        itemsPrice: itemsPrice,
-        deliveryPrice: deliveryPrice,
-        totalPrice: totalOrderPrice,
-        distanceKm: _roadDistanceKm,
-        durationMin: _estimatedMinutes,
-        // 🔹 Передаем данные заведения, чтобы курьеру сразу пришел адрес и координаты:
-        restaurantAddress: restaurantAddress,
-        restaurantLat: restaurantLat,
-        restaurantLng: restaurantLng,
-      );
-
-      String? effectiveShopId = (widget.shopId == "" || widget.shopId == "null" || widget.shopId == "combined") ? null : widget.shopId;
-      clearCart(userId!, effectiveShopId);
-
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => OrderConfirmationScreen(category: shopCategory),
-        ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
-    }
-  }
-
-  Widget _buildAddressHistory() {
-    if (userId == null) return const SizedBox.shrink();
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .collection('address_history')
-          .orderBy('createdAt', descending: true)
-          .limit(3)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const SizedBox.shrink();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 14),
-            const Text(
-              'Ранее использованные:',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF94A3B8)),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 38,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: snapshot.data!.docs.length,
-                itemBuilder: (context, index) {
-                  var doc = snapshot.data!.docs[index];
-                  var data = doc.data() as Map<String, dynamic>;
-
-                  LatLng loc = LatLng((data['lat'] as num).toDouble(), (data['lng'] as num).toDouble());
-
-                  String savedAddress = (data.containsKey('address') && data['address'] != null)
-                      ? data['address']
-                      : 'Адрес из истории';
-
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: InkWell(
-                      onTap: () => _updateRouteAndMetrics(loc, addressName: savedAddress),
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF0F172A).withValues(alpha: 0.02),
-                              blurRadius: 6,
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.history_rounded, size: 14, color: Color(0xFFEF4444)),
-                            const SizedBox(width: 6),
-                            Text(
-                              savedAddress,
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text(
-          'Оформление заказа',
-          style: TextStyle(
-            color: Color(0xFF0F172A),
-            fontWeight: FontWeight.w900,
-            fontSize: 20,
-            letterSpacing: -0.5,
-          ),
-        ),
-        backgroundColor: const Color(0xFFF8FAFC),
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        centerTitle: true,
-        iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              physics: const BouncingScrollPhysics(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildSectionTitle('Доставка'),
-                  const SizedBox(height: 12),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF0F172A).withValues(alpha: 0.04),
-                          blurRadius: 16,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        InkWell(
-                          onTap: _pickDeliveryLocation,
-                          borderRadius: BorderRadius.vertical(
-                            top: const Radius.circular(24),
-                            bottom: Radius.circular(_deliveryLocation != null ? 0 : 24),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF6366F1).withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  child: const Icon(Icons.location_on_rounded, color: Color(0xFF6366F1), size: 22),
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _deliveryLocation != null
-                                            ? (_deliveryAddressName ?? 'Адрес установлен')
-                                            : 'Указать адрес на карте',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 15,
-                                          color: _deliveryLocation != null ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
-                                        ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      if (_deliveryLocation != null) ...[
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          '${_roadDistanceKm.toStringAsFixed(1)} км • ~$_estimatedMinutes мин',
-                                          style: const TextStyle(
-                                            color: Color(0xFF10B981),
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                                if (_isLoadingRoute)
-                                  const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFF0F172A)),
-                                  )
-                                else
-                                  const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8), size: 26),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        if (_deliveryLocation != null && _restaurantLocation != null)
-                          Container(
-                            height: 160,
-                            decoration: const BoxDecoration(
-                              borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
-                              child: FlutterMap(
-                                mapController: _mapController,
-                                options: MapOptions(
-                                  initialCenter: _deliveryLocation!,
-                                  initialZoom: 13,
-                                ),
-                                children: [
-                                  TileLayer(
-                                    urlTemplate: 'https://map.99993.ru:1443/styles/openstreetmap/{z}/{x}/{y}.png',
-                                  ),
-                                  if (_routePoints.isNotEmpty)
-                                    PolylineLayer(
-                                      polylines: [
-                                        Polyline(
-                                          points: _routePoints,
-                                          strokeWidth: 8.5,
-                                          color: const Color(0xFFD97706).withValues(alpha: 0.2),
-                                        ),
-                                        Polyline(
-                                          points: _routePoints,
-                                          strokeWidth: 4.5,
-                                          color: const Color(0xFF1E293B),
-                                          borderStrokeWidth: 1.5,
-                                          borderColor: const Color(0xFFF59E0B),
-                                        ),
-                                      ],
-                                    ),
-                                  MarkerLayer(markers: [
-                                    Marker(
-                                      point: _restaurantLocation!,
-                                      width: 38,
-                                      height: 38,
-                                      alignment: Alignment.center,
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF0F172A),
-                                          shape: BoxShape.circle,
-                                          border: Border.all(color: const Color(0xFFF59E0B), width: 2),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withValues(alpha: 0.25),
-                                              blurRadius: 8,
-                                              offset: const Offset(0, 3),
-                                            ),
-                                          ],
-                                        ),
-                                        child: const Icon(
-                                          Icons.storefront_rounded,
-                                          color: Color(0xFFF59E0B),
-                                          size: 18,
-                                        ),
-                                      ),
-                                    ),
-                                    Marker(
-                                      point: _deliveryLocation!,
-                                      width: 32,
-                                      height: 32,
-                                      alignment: Alignment.center,
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFEF4444),
-                                          shape: BoxShape.circle,
-                                          border: Border.all(color: Colors.white, width: 2.5),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: const Color(0xFFEF4444).withValues(alpha: 0.35),
-                                              blurRadius: 8,
-                                              offset: const Offset(0, 3),
-                                            ),
-                                          ],
-                                        ),
-                                        child: const Icon(
-                                          Icons.location_pin,
-                                          color: Colors.white,
-                                          size: 16,
-                                        ),
-                                      ),
-                                    ),
-                                  ]),
-                                ],
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-
-                  _buildAddressHistory(),
-
-                  const SizedBox(height: 24),
-                  _buildSectionTitle('Комментарий продавцу'),
-                  const SizedBox(height: 10),
-                  _buildInputField((v) => setState(() => _restaurantComment = v), 'Пожелания к упаковке, комплектации...'),
-
-                  const SizedBox(height: 24),
-                  _buildSectionTitle('Комментарий курьеру'),
-                  const SizedBox(height: 10),
-                  _buildInputField((v) => setState(() => _comment = v), 'Подъезд, код домофона, этаж...'),
-
-                  const SizedBox(height: 24),
-                  _buildSectionTitle('Способ оплаты'),
-                  const SizedBox(height: 12),
-                  _buildPaymentGrid(),
-                ],
-              ),
-            ),
-          ),
-          _buildTotalPanel(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 17,
-        fontWeight: FontWeight.w900,
-        color: Color(0xFF0F172A),
-        letterSpacing: -0.3,
-      ),
-    );
-  }
-
-  Widget _buildInputField(Function(String) onChanged, String hint) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.03),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: TextField(
-        maxLines: 2,
-        onChanged: onChanged,
-        style: const TextStyle(fontSize: 14, color: Color(0xFF0F172A), fontWeight: FontWeight.w600),
-        decoration: InputDecoration(
-          hintText: hint,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.all(16),
-          hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14, fontWeight: FontWeight.normal),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPaymentGrid() {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 2.6,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-      ),
-      itemCount: paymentOptions.length,
-      itemBuilder: (context, index) {
-        final option = paymentOptions[index];
-        final selected = _selectedPayment == option['id'];
-        return GestureDetector(
-          onTap: () => setState(() => _selectedPayment = option['id'] as String),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            decoration: BoxDecoration(
-              color: selected ? const Color(0xFF0F172A) : Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: selected ? Colors.transparent : Colors.black.withValues(alpha: 0.05),
-              ),
-              boxShadow: selected
-                  ? [
-                BoxShadow(
-                  color: const Color(0xFF0F172A).withValues(alpha: 0.2),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                )
-              ]
-                  : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.02),
-                  blurRadius: 4,
-                )
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  option['icon'] as IconData,
-                  color: selected ? Colors.white : const Color(0xFF64748B),
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  option['label'] as String,
-                  style: TextStyle(
-                    color: selected ? Colors.white : const Color(0xFF0F172A),
-                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildTotalPanel() {
-    int displayItemsTotal = totalItemsPrice.round();
-    int displayDelivery = _deliveryPrice.round();
-    int displayExtraFee = _tariffExtraFee.round();
-    int displayGrandTotal = displayItemsTotal + displayDelivery + displayExtraFee;
-
-    return SafeArea(
-      bottom: true,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF0F172A).withValues(alpha: 0.08),
-              blurRadius: 24,
-              offset: const Offset(0, -8),
-            )
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Товары:', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600, fontSize: 13)),
-                Text('$displayItemsTotal Руб', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Color(0xFF0F172A))),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Доставка (курьеру):', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600, fontSize: 13)),
-                    if (_deliveryLocation != null)
-                      Text(
-                        'Расстояние: ${_roadDistanceKm.toStringAsFixed(2)} км',
-                        style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w700),
-                      ),
-                  ],
-                ),
-                Text(
-                  _deliveryLocation != null ? '$displayDelivery Руб' : '—',
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Color(0xFF6366F1)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    const Text('Тариф 15-17: ', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600, fontSize: 13)),
-                    Text(_logisticsTariff, style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w800, fontSize: 13)),
-                  ],
-                ),
-                Text(
-                  displayExtraFee > 0 ? '+$displayExtraFee Руб' : '0 Руб',
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Color(0xFF10B981)),
-                ),
-              ],
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Divider(height: 1, color: Color(0xFFF1F5F9)),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('К ОПЛАТЕ:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF0F172A))),
-                Text('$displayGrandTotal Руб', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Color(0xFF0F172A), letterSpacing: -0.5)),
-              ],
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton(
-                onPressed: _saveOrder,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F172A),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
-                ),
-                child: const Text(
-                  'Оформить заказ',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class OrderConfirmationScreen extends StatelessWidget {
-  final String? category;
-
-  const OrderConfirmationScreen({super.key, this.category});
-
-  String _getConfirmationSubtitle() {
-    switch (category?.toLowerCase()) {
-      case 'restaurant':
-        return 'Ваш заказ уже отправлен на кухню';
-      case 'svetok':
-        return 'Ваш заказ передан флористу';
-      case 'electronika':
-        return 'Ваш заказ передан на сборку';
-      case 'product':
-      case 'produkti':
-        return 'Ваш заказ передан в магазин';
-      case 'apteka':
-        return 'Ваш заказ передан в аптеку';
-      default:
-        return 'Ваш заказ успешно передан продавцу';
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 80),
-              ),
-              const SizedBox(height: 28),
-              const Text(
-                'Заказ оформлен!',
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Color(0xFF0F172A), letterSpacing: -0.5),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                _getConfirmationSubtitle(),
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFF64748B), fontSize: 15, fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 40),
-              SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF0F172A).withValues(alpha: 0.2),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      )
-                    ],
-                  ),
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                    child: const Text(
-                      'ВЕРНУТЬСЯ НА ГЛАВНУЮ',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-
-
-// Экран выбора точки на карте с автоматическим определением улицы (Reverse Geocoding)
-class SelectLocationScreen extends StatefulWidget {
-  const SelectLocationScreen({super.key});
-  @override
-  State<SelectLocationScreen> createState() => _SelectLocationScreenState();
-}
-
-class _SelectLocationScreenState extends State<SelectLocationScreen> {
-  final MapController _mapController = MapController();
-
-  LatLng? _currentCenterCoord;
-  String? _resolvedAddress;
-  bool _isLoadingAddress = false;
-  Timer? _debounceTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentCenterCoord = const LatLng(46.8410, 29.6470);
-    _onMapPositionChanged(_currentCenterCoord!, true);
-  }
-
+  // --- ОСВОБОЖДЕНИЕ РЕСУРСОВ ---
   @override
   void dispose() {
-    _debounceTimer?.cancel();
+    _mapDebounceTimer?.cancel();
+    _entranceController.dispose();
+    _floorController.dispose();
+    _apartmentController.dispose();
+    _intercomController.dispose();
+    _commentController.dispose();
     super.dispose();
   }
 
-  // Метод отслеживания движения карты с debounce (защита от частых запросов)
-  void _onMapPositionChanged(LatLng center, bool isInitial) {
-    setState(() {
-      _currentCenterCoord = center;
-      if (!isInitial) {
-        _isLoadingAddress = true;
-        _resolvedAddress = 'Определяем точный адрес...';
-      }
-    });
+  // ============================================================================
+  // ⚡ УСКОРЕННАЯ ИНИЦИАЛИЗАЦИЯ (Параллельные запросы + Fast GPS)
+  // ============================================================================
+  Future<void> _fastInitScreen() async {
+    await Future.wait([
+      _initRestaurantAddressOnly(),
+      _determineFastPosition(),
+    ]);
 
-    if (isInitial) {
-      _fetchAddressFromCoordinates(center);
-    } else {
-      _debounceTimer?.cancel();
-      _debounceTimer = Timer(const Duration(milliseconds: 500), () {
-        _fetchAddressFromCoordinates(center);
-      });
+    if (mounted) {
+      _fetchAddressFromCoordinates(_currentCenter);
     }
   }
 
-  // Метод для запроса названия улицы/адреса по координатам через OpenStreetMap Nominatim
+
+
+
+
+
+
+  double _calculateDeliveryPrice() {
+    double taximeterPrice = 0.0;
+    if (_routeData != null) {
+      if (_routeData!['price'] != null) {
+        taximeterPrice = double.tryParse(_routeData!['price'].toString()) ?? 0.0;
+      } else if (_routeData!['cost'] != null) {
+        taximeterPrice = double.tryParse(_routeData!['cost'].toString()) ?? 0.0;
+      } else if (_routeData!['distance'] != null) {
+        final dist = _routeData!['distance'];
+        double distanceKm = dist is int ? dist / 1000.0 : (dist is double ? dist : 0.0);
+        taximeterPrice = 18.0 + (distanceKm * 6.15);
+      }
+    }
+
+    double deliveryPrice = taximeterPrice < 45.0 ? 45.0 : taximeterPrice;
+
+    int totalItemsCount = 0;
+    for (var item in widget.cartItems) {
+      totalItemsCount += item.quantity;
+    }
+
+    if (totalItemsCount > 3) {
+      deliveryPrice += (totalItemsCount - 3) * 5.0;
+    }
+
+    if (_apartmentController.text.trim().isNotEmpty) {
+      deliveryPrice += 5.0;
+    }
+
+    return deliveryPrice;
+  }
+
+
+
+
+
+
+  // ============================================================================
+  // ЛОГИКА БЫСТРОГО ОПРЕДЕЛЕНИЯ GPS (Работает со спутниками телефона, не по IP!)
+  // ============================================================================
+  Future<void> _determineFastPosition() async {
+    setState(() => _isGettingLocation = true);
+
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) return;
+      }
+      if (permission == LocationPermission.deniedForever) return;
+
+      // 1. Сначала пробуем взять кэш (последнюю известную позицию) для мгновенного отклика
+      final Position? lastKnown = await Geolocator.getLastKnownPosition();
+      if (lastKnown != null && mounted) {
+        final LatLng cachedLatLng = LatLng(lastKnown.latitude, lastKnown.longitude);
+        setState(() {
+          _currentCenter = cachedLatLng;
+          _selectedAddressData = null;
+        });
+        _mapController.move(cachedLatLng, 16.5);
+        _fetchAddressFromCoordinates(cachedLatLng);
+      }
+
+      // 2. Параллельно запрашиваем точные свежие координаты со спутников (GPS / ГЛОНАСС)
+      final Position freshPosition = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+        timeLimit: const Duration(seconds: 4),
+      );
+
+      final LatLng freshLatLng = LatLng(freshPosition.latitude, freshPosition.longitude);
+
+      if (mounted) {
+        setState(() {
+          _currentCenter = freshLatLng;
+          _selectedAddressData = null; // Сбрасываем ручной ввод
+        });
+        _mapController.move(freshLatLng, 16.5);
+
+        // ⚡ ЭТО ОБЯЗАТЕЛЬНО: отправляем свежий GPS на бэкенд, чтобы получить ID адреса и нарисовать маршрут!
+        await _fetchAddressFromCoordinates(freshLatLng);
+      }
+    } catch (e) {
+      debugPrint('💥 [DEBUG GPS] Ошибка при определении GPS: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isGettingLocation = false);
+      }
+    }
+  }
+
+  // ============================================================================
+  // ТОЛЬКО ОПРЕДЕЛЕНИЕ ADDRESS_ID РЕСТОРАНА
+  // ============================================================================
+  Future<void> _initRestaurantAddressOnly() async {
+    setState(() => _isLocatingRestaurant = true);
+
+    try {
+      final int latInt = widget.restaurantLat.abs() > 90
+          ? widget.restaurantLat.toInt()
+          : (widget.restaurantLat * 1000000).round();
+
+      final int lonInt = widget.restaurantLng.abs() > 180
+          ? widget.restaurantLng.toInt()
+          : (widget.restaurantLng * 1000000).round();
+
+      final restaurantData = await AddressApiService.locateAddress(
+        latInt,
+        lonInt,
+        widget.apiToken,
+      );
+
+      if (mounted && restaurantData != null && restaurantData['id'] != null) {
+        _restaurantAddressId = restaurantData['id'] is int
+            ? restaurantData['id']
+            : int.parse(restaurantData['id'].toString());
+      }
+    } catch (e) {
+      debugPrint('💥 [DEBUG RESTAURANT] Ошибка поиска ресторана: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLocatingRestaurant = false);
+      }
+    }
+  }
+
+  // ============================================================================
+  // ЛОГИКА ОБРАБОТКИ ДВИЖЕНИЯ КАРТЫ И ТАЙМЕРА (ДЕБАУНС)
+  // ============================================================================
+  void _onMapPositionChanged(LatLng center, bool hasGesture) {
+    if (!hasGesture) return;
+
+    setState(() {
+      _currentCenter = center;
+      _isLoadingMapAddress = true;
+      _selectedAddressData = null;
+      _routePoints = [];
+      _routeData = null;
+    });
+
+    _mapDebounceTimer?.cancel();
+    _mapDebounceTimer = Timer(const Duration(milliseconds: 350), () {
+      _fetchAddressFromCoordinates(center);
+    });
+  }
+
+  // ============================================================================
+  // СЕТЕВОЙ ЗАПРОС К API ДЛЯ ОПРЕДЕЛЕНИЯ АДРЕСА ПО КООРДИНАТАМ КАРТЫ
+  // ============================================================================
   Future<void> _fetchAddressFromCoordinates(LatLng latLng) async {
     try {
-      final url = Uri.parse(
-        'https://nominatim.openstreetmap.org/reverse?format=json&lat=${latLng.latitude}&lon=${latLng.longitude}&accept-language=ru&addressdetails=1',
+      final int mapLatInt = (latLng.latitude * 1000000).round();
+      final int mapLonInt = (latLng.longitude * 1000000).round();
+
+      final addressResult = await AddressApiService.locateAddress(
+        mapLatInt,
+        mapLonInt,
+        widget.apiToken,
       );
 
-      final response = await http.get(
-        url,
-        headers: {'User-Agent': 'FlutterAppDeliveryOrder/1.0'},
-      );
+      if (mounted) {
+        setState(() {
+          _mapAddressData = addressResult;
+        });
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final address = data['address'] as Map<String, dynamic>?;
+        if (addressResult != null && addressResult['id'] != null) {
+          final int destinationAddressId = addressResult['id'] is int
+              ? addressResult['id']
+              : int.parse(addressResult['id'].toString());
 
-        if (address != null) {
-          String road = address['road'] ?? address['pedestrian'] ?? address['street'] ?? address['path'] ?? '';
-          String houseNumber = address['house_number'] ?? address['building'] ?? '';
-          String suburb = address['suburb'] ?? address['neighbourhood'] ?? address['city_district'] ?? '';
-          String city = address['city'] ?? address['town'] ?? address['village'] ?? address['hamlet'] ?? address['county'] ?? '';
-
-          List<String> parts = [];
-          if (road.isNotEmpty) {
-            if (houseNumber.isNotEmpty) {
-              parts.add('$road, $houseNumber');
-            } else {
-              parts.add(road);
-            }
-          } else if (suburb.isNotEmpty) {
-            parts.add(suburb);
+          if (_restaurantAddressId != null) {
+            _calculateRoute(destinationAddressId);
           }
-
-          if (city.isNotEmpty && !parts.contains(city)) {
-            parts.add(city);
-          }
-
-          if (mounted) {
-            setState(() {
-              if (parts.isNotEmpty) {
-                _resolvedAddress = parts.join(', ');
-              } else {
-                String rawName = data['display_name'] ?? '';
-                List<String> splitName = rawName.split(', ');
-                if (splitName.length > 3) splitName.removeLast();
-                _resolvedAddress = splitName.isNotEmpty ? splitName.join(', ') : 'Координаты: ${latLng.latitude.toStringAsFixed(4)}, ${latLng.longitude.toStringAsFixed(4)}';
-              }
-            });
-          }
-        } else {
-          if (mounted) {
-            setState(() {
-              _resolvedAddress = '${latLng.latitude.toStringAsFixed(5)}, ${latLng.longitude.toStringAsFixed(5)}';
-            });
-          }
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _resolvedAddress = '${latLng.latitude.toStringAsFixed(5)}, ${latLng.longitude.toStringAsFixed(5)} (Лимит)';
-          });
         }
       }
     } catch (e) {
-      debugPrint('Ошибка геокодинга: $e');
-      if (mounted) {
-        setState(() {
-          _resolvedAddress = '${latLng.latitude.toStringAsFixed(5)}, ${latLng.longitude.toStringAsFixed(5)}';
-        });
-      }
+      debugPrint('💥 [DEBUG MAP_POINT] Ошибка locateAddress: $e');
     } finally {
       if (mounted) {
         setState(() {
-          _isLoadingAddress = false;
+          _isLoadingMapAddress = false;
         });
       }
     }
   }
 
+  // ============================================================================
+  // СЕТЕВОЙ ЗАПРОС РАСЧЕТА МАРШРУТА (/v1/getRoute)
+  // ============================================================================
+  Future<void> _calculateRoute(int destinationAddressId) async {
+    if (_restaurantAddressId == null) return;
+
+    setState(() => _isCalculatingRoute = true);
+
+    try {
+      final List<int> addressPair = [
+        _restaurantAddressId!,
+        destinationAddressId
+      ];
+
+      final routeResult = await AddressApiService.getRoute(
+        groupId: widget.groupId,
+        addressIds: addressPair,
+        time: 0,
+      );
+
+      if (mounted && routeResult != null) {
+        final String? geometry = routeResult['geometry']?.toString();
+        List<LatLng> points = [];
+
+        if (geometry != null && geometry.isNotEmpty) {
+          points = _decodePolyline(geometry);
+        }
+
+        setState(() {
+          _routeData = routeResult;
+          _routePoints = points;
+        });
+      }
+    } catch (e) {
+      debugPrint('💥 [DEBUG ROUTE] Ошибка getRoute: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isCalculatingRoute = false);
+      }
+    }
+  }
+
+  // ============================================================================
+  // ДЕКОДЕР СТРОКИ GEOMETRY (Encoded Polyline)
+  // ============================================================================
+  List<LatLng> _decodePolyline(String encoded) {
+    List<LatLng> points = [];
+    int index = 0,
+        len = encoded.length;
+    int lat = 0,
+        lng = 0;
+
+    try {
+      while (index < len) {
+        int b,
+            shift = 0,
+            result = 0;
+        do {
+          b = encoded.codeUnitAt(index++) - 63;
+          result |= (b & 0x1f) << shift;
+          shift += 5;
+        } while (b >= 0x20);
+        int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+        lat += dlat;
+
+        shift = 0;
+        result = 0;
+        do {
+          b = encoded.codeUnitAt(index++) - 63;
+          result |= (b & 0x1f) << shift;
+          shift += 5;
+        } while (b >= 0x20);
+        int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+        lng += dlng;
+
+        double calcLat = lat / 1E5;
+        double calcLng = lng / 1E5;
+
+        while (calcLat.abs() > 90.0) {
+          calcLat /= 10.0;
+        }
+        while (calcLng.abs() > 180.0) {
+          calcLng /= 10.0;
+        }
+
+        points.add(LatLng(calcLat, calcLng));
+      }
+    } catch (e) {
+      debugPrint('💥 Ошибка при декодировании polyline: $e');
+    }
+    return points;
+  }
+
+  // ============================================================================
+  // ВСПОМОГАТЕЛЬНЫЙ МЕТОД ФОРМАТИРОВАНИЯ СТРОКИ АДРЕСА
+  // ============================================================================
+  String _formatAddressText(Map<String, dynamic>? addressData) {
+    if (addressData == null) return '';
+
+    final String name = addressData['name']?.toString() ?? '';
+    final String town = addressData['town']?.toString() ?? '';
+
+    if (town.isNotEmpty && name.isNotEmpty) {
+      if (!name.toLowerCase().contains(town.toLowerCase())) {
+        return '$town, $name';
+      }
+      return name;
+    }
+
+    return name.isNotEmpty ? name : town;
+  }
+
+  // ============================================================================
+  // ПЕРЕХОД И ОБРАБОТКА ВОЗВРАТА С ЭКРАНА РУЧНОГО ПОИСКА
+  // ============================================================================
+  Future<void> _openSearchAddressScreen() async {
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            SearchAddressScreen(
+              shopId: widget.shopId,
+              onOrderPlaced: widget.onOrderPlaced,
+              restaurantName: widget.restaurantName,
+            ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      setState(() {
+        _selectedAddressData = result;
+      });
+
+      if (result['id'] != null) {
+        final int targetId = result['id'] is int
+            ? result['id']
+            : int.parse(result['id'].toString());
+        _calculateRoute(targetId);
+      }
+
+      if (result['lat'] != null && result['lon'] != null) {
+        final double rawLat = double.tryParse(result['lat'].toString()) ?? 0.0;
+        final double rawLon = double.tryParse(result['lon'].toString()) ?? 0.0;
+
+        if (rawLat != 0.0 && rawLon != 0.0) {
+          final realLat = rawLat.abs() > 90 ? rawLat / 1000000.0 : rawLat;
+          final realLon = rawLon.abs() > 180 ? rawLon / 1000000.0 : rawLon;
+
+          final target = LatLng(realLat, realLon);
+          _mapController.move(target, 16.5);
+          _currentCenter = target;
+        }
+      }
+    }
+  }
+
+// ============================================================================
+// ПОСТРОЕНИЕ ПОЛЬЗОВАТЕЛЬСКОГО ИНТЕРФЕЙСА (UI) — ФИКСИРОВАННАЯ КАРТА + ШТОРКА
+// ============================================================================
   @override
   Widget build(BuildContext context) {
+    final activeAddress = _selectedAddressData ?? _mapAddressData;
+    final String formattedAddress = _formatAddressText(activeAddress);
+
+    final String displayAddressText = formattedAddress.isNotEmpty
+        ? formattedAddress
+        : (_isLoadingMapAddress || _isLocatingRestaurant || _isGettingLocation
+        ? 'Определяем адрес...'
+        : 'Переместите карту для выбора');
+
+    const double sheetHeight = 0.45; // Высота шторки в процентах от экрана
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: const Color(0xFFF4F5F7),
       appBar: AppBar(
-        title: const Text(
-          'Укажите место доставки',
-          style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w900, fontSize: 18),
+        title: Text(
+          'Заказ: ${widget.restaurantName}',
+          style: const TextStyle(
+            color: Color(0xFF111111),
+            fontWeight: FontWeight.w800,
+            fontSize: 17,
+            letterSpacing: -0.3,
+          ),
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
+        scrolledUnderElevation: 1,
         surfaceTintColor: Colors.transparent,
-        iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
+        iconTheme: const IconThemeData(color: Color(0xFF111111)),
       ),
       body: Stack(
         children: [
-          // Карта с отслеживанием центра
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: const LatLng(46.8410, 29.6470),
-              initialZoom: 16,
-              onPositionChanged: (position, hasGesture) {
-                if (hasGesture && position.center != null) {
-                  _onMapPositionChanged(position.center!, false);
-                }
-              },
-            ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://map.99993.ru:1443/styles/openstreetmap/{z}/{x}/{y}.png',
-              ),
-            ],
-          ),
-
-          // Роскошная красная/коралловая булавка строго по центру экрана с тенью
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.only(bottom: 38), // компенсируем «ножку» иконки
-              child: Icon(
-                Icons.location_on_rounded,
-                color: Color(0xFFEF4444), // Красивый современный красный (Red-500)
-                size: 52,
-              ),
-            ),
-          ),
-
-          // Премиальная плашка с отображением найденной улицы сверху карты
+// ------------------------------------------------------------------
+// 1. БЛОК ИНТЕРАКТИВНОЙ КАРТЫ (ОГРАНИЧЕН ВИДИМОЙ ОБЛАСТЬЮ НАД ШТОРКОЙ)
+// ------------------------------------------------------------------
           Positioned(
-            top: 16,
-            left: 20,
-            right: 20,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF0F172A).withValues(alpha: 0.08),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: MediaQuery
+                .of(context)
+                .size
+                .height * sheetHeight,
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: _currentCenter,
+                initialZoom: 16.0,
+                onPositionChanged: (position, hasGesture) {
+                  if (position.center != null) {
+                    _onMapPositionChanged(position.center!, hasGesture);
+                  }
+                },
               ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEF4444).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.place_rounded, color: Color(0xFFEF4444), size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      _resolvedAddress ?? 'Переместите карту для выбора...',
-                      style: const TextStyle(
-                        color: Color(0xFF0F172A),
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://map.99993.ru:1443/styles/openstreetmap/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.example.app',
+                ),
+
+// 🔹 МЕТКА САМОГО РЕСТОРАНА НА КАРТЕ
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: _restaurantMapLatLng,
+                      width: 40,
+                      height: 40,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF16A34A),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.15),
+                              blurRadius: 6,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                            Icons.restaurant, color: Colors.white, size: 20),
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (_isLoadingAddress) ...[
-                    const SizedBox(width: 12),
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444)),
                     ),
                   ],
-                ],
-              ),
-            ),
-          ),
+                ),
 
-          // Роскошная кнопка подтверждения точки внизу экрана с градиентом
-          Positioned(
-            bottom: 24,
-            left: 20,
-            right: 20,
-            child: SafeArea(
-              child: SizedBox(
-                height: 56,
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF0F172A).withValues(alpha: 0.3),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
+// 🔹 ОТРЕСОВКА СИНЕЙ ЛИНИИ МАРШРУТА НА КАРТЕ
+                if (_routePoints.isNotEmpty)
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: _routePoints,
+                        strokeWidth: 5.0,
+                        color: const Color(0xFF2563EB),
+                        strokeCap: StrokeCap.round,
+                        strokeJoin: StrokeJoin.round,
                       ),
                     ],
                   ),
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                    ),
-                    onPressed: _currentCenterCoord != null
-                        ? () => Navigator.pop(context, {
-                      'latLng': _currentCenterCoord,
-                      'address': _resolvedAddress,
-                    })
-                        : null,
-                    child: const Text(
-                      'ПОДТВЕРДИТЬ ЭТОТ АДРЕС',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 15,
-                        letterSpacing: 0.8,
+              ],
+            ),
+          ),
+
+// ------------------------------------------------------------------
+// СТРОГО ЦЕНТРАЛЬНЫЙ ПИН «А» (ПОВЕРХ ВСЕГО В ЦЕНТРЕ ВИДИМОЙ ЗОНЫ КАРТЫ)
+// ------------------------------------------------------------------
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: MediaQuery
+                .of(context)
+                .size
+                .height * sheetHeight,
+            child: IgnorePointer(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2563EB),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.25),
+                            blurRadius: 6,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
                       ),
+                      alignment: Alignment.center,
+                      child: const Text(
+                        'А',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 10,
+                      height: 8,
+                      child: ClipPath(
+                        clipper: _PinTailClipper(),
+                        child: Container(
+                          color: const Color(0xFF2563EB),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+// ------------------------------------------------------------------
+// 2. КНОПКА «МОЕ МЕСТОПОЛОЖЕНИЕ» (GPS)
+// ------------------------------------------------------------------
+          Positioned(
+            bottom: MediaQuery
+                .of(context)
+                .size
+                .height * sheetHeight + 16,
+            right: 16,
+            child: Material(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              elevation: 4,
+              shadowColor: Colors.black.withOpacity(0.15),
+              child: InkWell(
+                onTap: _isGettingLocation ? null : _determineFastPosition,
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  alignment: Alignment.center,
+                  child: _isGettingLocation
+                      ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Color(0xFF111111)),
+                  )
+                      : const Icon(
+                    Icons.my_location_rounded,
+                    color: Color(0xFF111111),
+                    size: 20,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+// ------------------------------------------------------------------
+// 3. НИЖНЯЯ ПАНЕЛЬ (ФИКСИРОВАННАЯ ШТОРКА С ПРОКРУТКОЙ)
+// ------------------------------------------------------------------
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery
+                    .of(context)
+                    .size
+                    .height * sheetHeight,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF4F5F7),
+                borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.12),
+                    blurRadius: 20,
+                    offset: const Offset(0, -6),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+// Индикатор шторки
+                        Center(
+                          child: Container(
+                            width: 36,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFD1D5DB),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+
+// ==========================================
+// СЕКЦИЯ «КУДА»
+// ==========================================
+                        const Text(
+                          'Куда',
+                          style: TextStyle(
+                            color: Color(0xFF111111),
+                            fontWeight: FontWeight.w900,
+                            fontSize: 18,
+                            letterSpacing: -0.4,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                                color: const Color(0xFFE5E7EB), width: 1),
+                          ),
+                          child: Column(
+                            children: [
+// 1. Строка выбора / отображения адреса
+                              InkWell(
+                                onTap: _openSearchAddressScreen,
+                                borderRadius: const BorderRadius.vertical(
+                                    top: Radius.circular(16)),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(14),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.home_rounded,
+                                          color: Color(0xFF111111), size: 20),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          displayAddressText,
+                                          style: const TextStyle(
+                                            color: Color(0xFF111111),
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 14,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const Icon(
+                                          Icons.arrow_forward_ios_rounded,
+                                          color: Color(0xFF9CA3AF), size: 14),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+// КНОПКА «Другой способ / Указать вручную» в строгом стиле интерфейса
+                              const Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6)),
+                              InkWell(
+                                onTap: _openSearchAddressScreen,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: const [
+                                      Text(
+                                        'Другой способ (указать вручную)',
+                                        style: TextStyle(
+                                          color: Color(0xFF111111),
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      Icon(
+                                        Icons.edit_location_alt_outlined,
+                                        color: Color(0xFF6B7280),
+                                        size: 16,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                              const Divider(height: 1,
+                                  thickness: 1,
+                                  color: Color(0xFFF3F4F6)),
+
+// 2. Строка полей ввода
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 4),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _entranceController,
+                                        style: const TextStyle(fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF111111)),
+                                        decoration: const InputDecoration(
+                                          labelText: 'Подъезд',
+                                          labelStyle: TextStyle(fontSize: 12,
+                                              color: Color(0xFF9CA3AF)),
+                                          border: InputBorder.none,
+                                          isDense: true,
+                                          contentPadding: EdgeInsets.symmetric(
+                                              vertical: 10),
+                                        ),
+                                      ),
+                                    ),
+                                    Container(height: 24,
+                                        width: 1,
+                                        color: const Color(0xFFF3F4F6)),
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(
+                                            left: 8.0),
+                                        child: TextField(
+                                          controller: _floorController,
+                                          style: const TextStyle(fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF111111)),
+                                          decoration: const InputDecoration(
+                                            labelText: 'Этаж',
+                                            labelStyle: TextStyle(fontSize: 12,
+                                                color: Color(0xFF9CA3AF)),
+                                            border: InputBorder.none,
+                                            isDense: true,
+                                            contentPadding: EdgeInsets
+                                                .symmetric(vertical: 10),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Container(height: 24,
+                                        width: 1,
+                                        color: const Color(0xFFF3F4F6)),
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(left: 8.0),
+                                        child: TextField(
+                                          controller: _apartmentController,
+                                          onChanged: (value) => setState(() {}), // 👈 ЭТА СТРОКА РЕШАЕТ ПРОБЛЕМУ
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF111111),
+                                          ),
+                                          decoration: const InputDecoration(
+                                            labelText: 'Кв/Офис',
+                                            labelStyle: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+                                            border: InputBorder.none,
+                                            isDense: true,
+                                            contentPadding: EdgeInsets.symmetric(vertical: 10),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Container(height: 24,
+                                        width: 1,
+                                        color: const Color(0xFFF3F4F6)),
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(
+                                            left: 8.0),
+                                        child: TextField(
+                                          controller: _intercomController,
+                                          style: const TextStyle(fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF111111)),
+                                          decoration: const InputDecoration(
+                                            labelText: 'Домофон',
+                                            labelStyle: TextStyle(fontSize: 12,
+                                                color: Color(0xFF9CA3AF)),
+                                            border: InputBorder.none,
+                                            isDense: true,
+                                            contentPadding: EdgeInsets
+                                                .symmetric(vertical: 10),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Divider(height: 1,
+                                  thickness: 1,
+                                  color: Color(0xFFF3F4F6)),
+
+// 3. Комментарий
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14),
+                                child: TextField(
+                                  controller: _commentController,
+                                  maxLines: 2,
+                                  minLines: 1,
+                                  style: const TextStyle(fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: Color(0xFF111111)),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Комментарий к заведению',
+                                    hintStyle: TextStyle(
+                                        fontSize: 13, color: Color(0xFF9CA3AF)),
+                                    prefixIcon: Icon(
+                                        Icons.chat_bubble_outline_rounded,
+                                        color: Color(0xFF9CA3AF), size: 18),
+                                    prefixIconConstraints: BoxConstraints(
+                                        minWidth: 32),
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(
+                                        vertical: 12),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+// ==========================================
+// СЕКЦИЯ «ОПЛАТА»
+// ==========================================
+                        const Text(
+                          'Оплата',
+                          style: TextStyle(
+                            color: Color(0xFF111111),
+                            fontWeight: FontWeight.w900,
+                            fontSize: 18,
+                            letterSpacing: -0.4,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+
+                        GridView.builder(
+                          itemCount: paymentOptions.length,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 8,
+                            crossAxisSpacing: 8,
+                            childAspectRatio: 2.8,
+                          ),
+                          itemBuilder: (context, index) {
+                            final option = paymentOptions[index];
+                            final bool isSelected = _selectedPaymentMethod ==
+                                option['id'];
+
+                            return Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    _selectedPaymentMethod = option['id'];
+                                  });
+                                },
+                                borderRadius: BorderRadius.circular(14),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: isSelected ? const Color(
+                                          0xFF111111) : const Color(0xFFE5E7EB),
+                                      width: isSelected ? 2 : 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        option['icon'] as IconData,
+                                        color: isSelected ? const Color(
+                                            0xFF111111) : const Color(
+                                            0xFF4B5563),
+                                        size: 18,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          option['label'],
+                                          style: TextStyle(
+                                            color: isSelected ? const Color(
+                                                0xFF111111) : const Color(
+                                                0xFF374151),
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 13,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 16),
+
+// ==========================================
+// СЕКЦИЯ РАСЧЕТА И КНОПКА
+// ==========================================
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                    ),
+                    child: Column(
+                      children: [
+                        // 1. Сумма за товары
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Товары',
+                              style: TextStyle(fontSize: 13, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+                            ),
+                            Text(
+                              '${widget.productsTotal.toInt()} руб.',
+                              style: const TextStyle(fontSize: 13, color: Color(0xFF111111), fontWeight: FontWeight.w700),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+
+                        // 2. Стоимость доставки
+                        if (_isCalculatingRoute || _isLocatingRestaurant) ...[
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 4.0),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF111111)),
+                                ),
+                                SizedBox(width: 8),
+                                Text('Расчет доставки...', style: TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+                              ],
+                            ),
+                          ),
+                        ] else ...[
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Доставка',
+                                style: TextStyle(fontSize: 13, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+                              ),
+                              Text(
+                                '${_calculateDeliveryPrice().toInt()} руб.',
+                                style: const TextStyle(fontSize: 13, color: Color(0xFF111111), fontWeight: FontWeight.w700),
+                              ),
+                            ],
+                          ),
+                        ],
+
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8.0),
+                          child: Divider(height: 1, color: Color(0xFFF3F4F6)),
+                        ),
+
+                        // 3. Итого (Товары + Доставка)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Всего',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF111111),
+                              ),
+                            ),
+                            Text(
+                              '${(widget.productsTotal + _calculateDeliveryPrice()).toInt()} руб.',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF111111),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Кнопка оплаты
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: (activeAddress != null)
+                                ? () {
+                              final String baseAddress = displayAddressText;
+                              final String entrance = _entranceController.text.trim();
+                              final String floor = _floorController.text.trim();
+                              final String apartment = _apartmentController.text.trim();
+                              final String intercom = _intercomController.text.trim();
+
+                              List<String> addressParts = [baseAddress];
+                              if (entrance.isNotEmpty) addressParts.add('под. $entrance');
+                              if (floor.isNotEmpty) addressParts.add('эт. $floor');
+                              if (apartment.isNotEmpty) addressParts.add('кв. $apartment');
+
+                              String finalFullAddress = addressParts.join(', ');
+                              if (intercom.isNotEmpty) {
+                                finalFullAddress += ' (домофон: $intercom)';
+                              }
+
+                              debugPrint('📦 ФИНАЛЬНЫЙ АДРЕС ДЛЯ КУРЬЕРА: $finalFullAddress');
+                              debugPrint('💰 ИТОГОВАЯ СУММА К ОПЛАТЕ: ${widget.productsTotal + _calculateDeliveryPrice()} руб.');
+                            }
+                                : null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF111111),
+                              disabledBackgroundColor: const Color(0xFFE5E7EB),
+                              foregroundColor: Colors.white,
+                              disabledForegroundColor: const Color(0xFF9CA3AF),
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              'Оформить заказ',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                      ],
                     ),
                   ),
                 ),
@@ -1166,5 +1196,27 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
         ],
       ),
     );
+  }}
+
+
+
+
+
+
+// =================================================0===========================
+// ВСПОМОГАТЕЛЬНЫЙ КЛИППЕР ДЛЯ ОРИГИНАЛЬНОГО УКАЗАТЕЛЯ ПИНА
+// ============================================================================
+class _PinTailClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    path.moveTo(0, 0);
+    path.lineTo(size.width, 0);
+    path.lineTo(size.width / 2, size.height);
+    path.close();
+    return path;
   }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }

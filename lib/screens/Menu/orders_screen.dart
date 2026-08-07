@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
+import '../../models/dish_model.dart';
 import '../../models/order_model.dart';
 import '../../screens/Menu/Cart_data.dart';
 import '../../screens/Menu/cart_screen.dart';
@@ -28,21 +29,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
     _initOrdersStream();
   }
 
-  String _translateStatus(String status) {
-    switch (status.toLowerCase()) {
-      case 'new': return 'Новый';
-      case 'preparing': return 'Готовится';
-      case 'accepted': return 'Принят';
-      case 'in_progress':
-      case 'inprogress': return 'В пути';
-      case 'ready': return 'Готов';
-      case 'delivered':
-      case 'completed': return 'Доставлен';
-      case 'cancelled': return 'Отменен';
-      default: return status;
-    }
-  }
-
   String _translateOption(String option) {
     switch (option) {
       case 'receiver_pay': return 'Оплата получателем';
@@ -54,39 +40,71 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 
   void _initOrdersStream() {
+    // Загружаем заказы без неравенств и индексов, фильтрацию делаем в памяти через .map
     ordersStream = FirebaseFirestore.instance
         .collection('users').doc(widget.userId).collection('orders')
-        .orderBy('createdAt', descending: true).snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) {
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+        .map((doc) {
       try {
         return Order.fromFirestore(doc.id, doc.data());
       } catch (e) {
         debugPrint('Ошибка парсинга заказа еды ${doc.id}: $e');
         return null;
       }
-    }).where((order) => order != null).cast<Order>().toList());
+    })
+        .where((order) => order != null)
+        .cast<Order>()
+    // Исключаем скрытые заказы прямо на клиенте
+        .where((order) => docDataIsVisible(snapshot.docs, order.id))
+        .toList());
 
     deliveryStream = FirebaseFirestore.instance
         .collection('users').doc(widget.userId).collection('delivery_orders')
-        .orderBy('createdAt', descending: true).snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) {
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+        .map((doc) {
       try {
         return DeliveryOrder.fromFirestore(doc.id, doc.data());
       } catch (e) {
         debugPrint('Ошибка парсинга доставки ${doc.id}: $e');
         return null;
       }
-    }).where((order) => order != null).cast<DeliveryOrder>().toList());
+    })
+        .where((order) => order != null)
+        .cast<DeliveryOrder>()
+    // Исключаем скрытые доставки прямо на клиенте
+        .where((order) => docDataIsVisible(snapshot.docs, order.id))
+        .toList());
   }
 
+  // Вспомогательная проверка поля hiddenForUser локально
+  bool docDataIsVisible(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs, String id) {
+    try {
+      final doc = docs.firstWhere((d) => d.id == id);
+      final data = doc.data();
+      return data['hiddenForUser'] != true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  // Помечаем заказ скрытым для клиента в БД
   Future<void> _deleteOrder(String collectionPath, String orderId) async {
     try {
       await FirebaseFirestore.instance
-          .collection('users').doc(widget.userId).collection(collectionPath).doc(orderId).delete();
+          .collection('users')
+          .doc(widget.userId)
+          .collection(collectionPath)
+          .doc(orderId)
+          .update({'hiddenForUser': true});
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Заказ удален', style: TextStyle(fontWeight: FontWeight.w600)),
+            content: const Text('Заказ скрыт из истории', style: TextStyle(fontWeight: FontWeight.w600)),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             backgroundColor: const Color(0xFF0F172A),
@@ -105,14 +123,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
         );
       }
     }
-  }
-
-  void _repeatOrder(Order order) {
-    if (order.shopId == null || order.shopId!.isEmpty) return;
-    for (var item in order.items) {
-      addToCartItem(widget.userId, order.shopId!, item.dish);
-    }
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => CartScreen(shopId: order.shopId!, restaurantName: order.restaurantName ?? "Ресторан")));
   }
 
   @override
@@ -232,11 +242,19 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 
   Widget _buildExpressCard(DeliveryOrder order) {
-    String fromText = order.pickupAddress ??
-        "${order.pickup.latitude.toStringAsFixed(6)}, ${order.pickup.longitude.toStringAsFixed(6)}";
+    // Берем значения прямо из объекта, который пришел из базы
+    String fromText = order.pickupAddress ?? 'Не указано';
+    String toText = order.dropoffAddress ?? 'Не указано';
 
-    String toText = order.dropoffAddress ??
-        "${order.dropoff.latitude.toStringAsFixed(6)}, ${order.dropoff.longitude.toStringAsFixed(6)}";
+    // Заголовок заказа
+    String subTypeTitle = 'Индивидуальная доставка';
+    if (order.subType == 'buy') {
+      subTypeTitle = 'Заказ: Купить и привезти';
+    } else if (order.subType == 'pickup') {
+      subTypeTitle = 'Заказ: Забрать отправление';
+    } else if (order.subType == 'task') {
+      subTypeTitle = 'Заказ: Поручение';
+    }
 
     return _baseCard(
       color: const Color(0xFF8B5CF6),
@@ -246,17 +264,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
           color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
           shape: BoxShape.circle,
           border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.2)),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            )
-          ],
         ),
         child: const Icon(Icons.directions_run_rounded, color: Color(0xFF8B5CF6), size: 18),
       ),
-      title: 'Индивидуальная доставка',
+      title: subTypeTitle,
       dateTime: order.createdAt,
       path: 'delivery_orders',
       id: order.id,
@@ -267,22 +278,26 @@ class _OrdersScreenState extends State<OrdersScreen> {
           _build3dConnector(),
           _routeRow(Icons.location_on_rounded, const Color(0xFF8B5CF6), "Куда: $toText"),
 
-          if (order.comment != null && order.comment!.trim().isNotEmpty) ...[
+          // Выводим описание только если оно реально заполнено и не равно "Без описания"
+          if (order.description != null &&
+              order.description!.trim().isNotEmpty &&
+              order.description != 'Без описания') ...[
             const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(12),
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.comment_outlined, size: 14, color: Color(0xFF64748B)),
-                  const SizedBox(width: 8),
+                  const Icon(Icons.notes, size: 16, color: Color(0xFF8B5CF6)),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      "Комментарий: ${order.comment}",
-                      style: const TextStyle(fontSize: 12, color: Color(0xFF475569), fontWeight: FontWeight.w600),
+                      "${order.description}",
+                      style: const TextStyle(fontSize: 13, color: Color(0xFF475569), fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
@@ -290,48 +305,61 @@ class _OrdersScreenState extends State<OrdersScreen> {
             ),
           ],
 
-          if (order.options.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: order.options.map((opt) => Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.check_circle_rounded, size: 12, color: Color(0xFF10B981)),
-                    const SizedBox(width: 5),
-                    Text(_translateOption(opt), style: const TextStyle(fontSize: 11, color: Color(0xFF475569), fontWeight: FontWeight.w700)),
-                  ],
-                ),
-              )).toList(),
-            ),
-          ],
-
           _divider(),
-          _footerRow(order.totalCost.toInt().toString(), order.status, const Color(0xFF8B5CF6)),
+          _footerRow(order.totalCost.toInt().toString(), const Color(0xFF8B5CF6)),
         ],
       ),
     );
   }
-
   Widget _buildFoodCard(Order order) {
     List<dynamic> displayItems = order.items;
 
-    double calculatedTotal = 0.0;
-    for (var item in displayItems) {
-      final price = (item.dish.price ?? 0.0).toDouble();
-      final quantity = (item.quantity ?? 1).toInt();
-      calculatedTotal += price * quantity;
+    // 1. Приоритетно берем готовую итоговую сумму из полей документа в БД
+    double finalTotalSum = 0.0;
+
+    if (order.totalPrice != null && order.totalPrice! > 0) {
+      finalTotalSum = order.totalPrice!.toDouble();
+    } else if ((order as dynamic).total != null && ((order as dynamic).total as num) > 0) {
+      finalTotalSum = ((order as dynamic).total as num).toDouble();
+    } else {
+      // 2. Фолбэк-пересчет, если в документе нет totalPrice / total
+      double calculatedItemsTotal = 0.0;
+
+      for (var item in displayItems) {
+        final itemMap = item is Map ? item : null;
+
+        final price = itemMap != null
+            ? ((itemMap['price'] ?? 0.0) as num).toDouble()
+            : ((item.dish?.price ?? 0.0) as num).toDouble();
+
+        final quantity = itemMap != null
+            ? ((itemMap['quantity'] ?? 1) as num).toInt()
+            : ((item.quantity ?? 1) as num).toInt();
+
+        double modifiersTotal = 0.0;
+        final dynamic itemModifiers = itemMap != null
+            ? (itemMap['modifiers'] ?? itemMap['addons'])
+            : ((item as dynamic).modifiers ?? (item.dish as dynamic).modifiers);
+
+        if (itemModifiers != null && itemModifiers is List) {
+          for (var mod in itemModifiers) {
+            if (mod is Map && mod['price'] != null) {
+              modifiersTotal += (mod['price'] is num)
+                  ? (mod['price'] as num).toDouble()
+                  : (double.tryParse(mod['price'].toString()) ?? 0.0);
+            }
+          }
+        }
+
+        // Итоговая стоимость одной позиции = (Базовая цена + Модификаторы) * Количество
+        calculatedItemsTotal += (price + modifiersTotal) * quantity;
+      }
+
+      final delivery = (order.deliveryPrice ?? 0.0).toDouble();
+      finalTotalSum = calculatedItemsTotal + delivery;
     }
+
     final delivery = (order.deliveryPrice ?? 0.0).toDouble();
-    calculatedTotal += delivery;
 
     Widget logoWidget = Container(
       padding: const EdgeInsets.all(9),
@@ -339,13 +367,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
         color: const Color(0xFFF97316).withValues(alpha: 0.12),
         shape: BoxShape.circle,
         border: Border.all(color: const Color(0xFFF97316).withValues(alpha: 0.2)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFF97316).withValues(alpha: 0.1),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          )
-        ],
       ),
       child: const Icon(Icons.restaurant_rounded, color: Color(0xFFF97316), size: 18),
     );
@@ -362,18 +383,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
           if (logoUrl != null && logoUrl.isNotEmpty) {
             return Container(
-              width: 36,
-              height: 36,
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(color: const Color(0xFFF97316).withValues(alpha: 0.2), width: 1.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFF97316).withValues(alpha: 0.1),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  )
-                ],
               ),
               child: ClipOval(
                 child: logoUrl.startsWith('http')
@@ -407,129 +421,283 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return _baseCard(
       color: const Color(0xFFF97316),
       leadingWidget: logoWidget,
-      title: order.restaurantName ?? 'Доставка еды',
+      title: order.restaurantName ?? 'Заказ из заведения',
       dateTime: order.dateTime,
       path: 'orders',
       id: order.id,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ...displayItems.map((item) {
-            final name = item.dish.name;
-            final image = item.dish.imagePath;
-            final price = (item.dish.price ?? 0.0).toDouble();
-            final quantity = (item.quantity ?? 1).toInt();
+          ...displayItems.asMap().entries.map((entry) {
+            final int index = entry.key;
+            final item = entry.value;
 
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.04),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        )
-                      ],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
+            final itemMap = item is Map ? item : null;
+
+            final name = itemMap != null
+                ? (itemMap['name'] ?? itemMap['title'] ?? 'Товар')
+                : (item.dish?.name ?? 'Товар');
+
+            final image = itemMap != null
+                ? (itemMap['imagePath'] ?? itemMap['imageUrl'] ?? itemMap['image'] ?? '')
+                : (item.dish?.imagePath ?? '');
+
+            final price = itemMap != null
+                ? ((itemMap['price'] ?? 0.0) as num).toDouble()
+                : ((item.dish?.price ?? 0.0) as num).toDouble();
+
+            final quantity = itemMap != null
+                ? ((itemMap['quantity'] ?? 1) as num).toInt()
+                : ((item.quantity ?? 1) as num).toInt();
+
+            final weight = itemMap != null
+                ? (itemMap['weight']?.toString() ?? '')
+                : (item.dish?.weight?.toString() ?? '');
+
+            String? size;
+            if (itemMap != null) {
+              size = itemMap['size'] ??
+                  itemMap['selectedSize'] ??
+                  itemMap['selected_size'] ??
+                  itemMap['dishSize'];
+            } else {
+              try {
+                size = (item as dynamic).size ??
+                    (item as dynamic).selectedSize ??
+                    (item as dynamic).selected_size;
+              } catch (_) {}
+
+              if ((size == null || size.toString().isEmpty) && item.dish != null) {
+                try {
+                  final d = item.dish;
+                  if (d is Map) {
+                    size = d['size'] ?? d['selectedSize'] ?? d['dishSize'];
+                  } else {
+                    size = (d as dynamic).size ?? (d as dynamic).selectedSize;
+                  }
+                } catch (_) {}
+              }
+            }
+
+            final String finalSize = (size != null) ? size.toString().trim() : '';
+
+            final dynamic rawModifiers = itemMap != null
+                ? (itemMap['modifiers'] ?? itemMap['addons'])
+                : ((item as dynamic).modifiers ?? (item.dish as dynamic).modifiers);
+
+            final List<dynamic>? modifiers = rawModifiers is List ? rawModifiers : null;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (index > 0)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                    child: Divider(height: 1, color: Color(0xFFF1F5F9)),
+                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
                       child: (image.isNotEmpty)
                           ? (image.startsWith('http')
                           ? Image.network(
                         image,
-                        width: 42,
-                        height: 42,
+                        width: 56,
+                        height: 56,
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => _imageErrorPlaceholder(),
                       )
                           : Image.asset(
                         image,
-                        width: 42,
-                        height: 42,
+                        width: 56,
+                        height: 56,
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => _imageErrorPlaceholder(),
                       ))
                           : _imageErrorPlaceholder(),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              color: Color(0xFF0F172A),
+                              height: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Row(
+                            children: [
+                              Text(
+                                '${price.toInt()} Руб',
+                                style: const TextStyle(
+                                  color: Color(0xFF0F172A),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (finalSize.isNotEmpty || (weight.isNotEmpty && weight != '0')) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              [
+                                if (finalSize.isNotEmpty) 'Размер: $finalSize',
+                                if (weight.isNotEmpty && weight != '0') weight
+                              ].join(' • '),
+                              style: const TextStyle(
+                                color: Color(0xFFF97316),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '$quantity шт',
+                        style: const TextStyle(
+                          color: Color(0xFF475569),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (modifiers != null && modifiers.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          name,
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: Color(0xFF0F172A)),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        const Text(
+                          'Дополнительно',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF94A3B8),
+                            letterSpacing: 0.3,
+                          ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${price.toInt()} Руб/шт',
-                          style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w600),
-                        ),
+                        const SizedBox(height: 6),
+                        ...modifiers.map((mod) {
+                          String modName = '';
+                          double modPrice = 0.0;
+
+                          if (mod is Map) {
+                            modName = mod['name']?.toString() ?? '';
+                            modPrice = double.tryParse(mod['price']?.toString() ?? '0') ?? 0.0;
+                          } else {
+                            try {
+                              modName = (mod as dynamic).name.toString();
+                              modPrice = double.tryParse((mod as dynamic).price.toString()) ?? 0.0;
+                            } catch (_) {
+                              modName = mod.toString();
+                            }
+                          }
+
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.add_rounded, size: 12, color: Color(0xFFF97316)),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          modName,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Color(0xFF475569),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (modPrice > 0)
+                                  Text(
+                                    '+${modPrice.toInt()} Руб',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFFF97316),
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        }),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      '$quantity шт',
-                      style: const TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w700),
-                    ),
-                  ),
                 ],
-              ),
+              ],
             );
           }),
-
-          _divider(),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '${calculatedTotal.toInt()} Руб',
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF0F172A), letterSpacing: -0.5),
-              ),
-              Container(
-                height: 38,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFF97316).withValues(alpha: 0.25),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    )
+          if (delivery > 0) ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Divider(height: 1, color: Color(0xFFF1F5F9)),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.delivery_dining_rounded, size: 16, color: Color(0xFF94A3B8)),
+                    SizedBox(width: 8),
+                    Text(
+                      'Доставка',
+                      style: TextStyle(fontSize: 13, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+                    ),
                   ],
                 ),
-                child: ElevatedButton.icon(
-                  onPressed: () => _repeatOrder(order),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFF97316),
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                  ),
-                  icon: const Icon(Icons.replay_rounded, size: 16),
-                  label: const Text('Повторить', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                Text(
+                  '${delivery.toInt()} Руб',
+                  style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A), fontWeight: FontWeight.w800),
                 ),
-              ),
-            ],
-          )
+              ],
+            ),
+          ],
+          _divider(),
+          _footerRow(finalTotalSum.toInt().toString(), const Color(0xFFF97316)),
         ],
       ),
     );
   }
+
+
+
 
   Widget _fallbackRestaurantIcon() {
     return Container(
@@ -544,10 +712,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   Widget _imageErrorPlaceholder() {
     return Container(
-      width: 42,
-      height: 42,
-      color: Colors.grey.shade200,
-      child: const Icon(Icons.fastfood, size: 20, color: Colors.grey),
+      width: 56,
+      height: 56,
+      color: Colors.grey.shade100,
+      child: const Icon(Icons.fastfood_rounded, size: 24, color: Color(0xFF94A3B8)),
     );
   }
 
@@ -563,13 +731,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Colors.white, Color(0xFFFAFAFC)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white, width: 1.5),
+        border: Border.all(color: const Color(0xFFE2E8F0).withValues(alpha: 0.8), width: 1),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF0F172A).withValues(alpha: 0.04),
@@ -586,7 +750,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
+            padding: const EdgeInsets.fromLTRB(16, 16, 12, 12),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -602,14 +766,23 @@ class _OrdersScreenState extends State<OrdersScreen> {
                           children: [
                             Text(
                               title,
-                              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Color(0xFF0F172A), letterSpacing: -0.2),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 15,
+                                color: Color(0xFF0F172A),
+                                letterSpacing: -0.2,
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 2),
                             Text(
                               DateFormat('dd.MM.yyyy  •  HH:mm').format(dateTime.toLocal()),
-                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w600),
+                              style: const TextStyle(
+                                color: Color(0xFF94A3B8),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ],
                         ),
@@ -618,8 +791,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   ),
                 ),
                 Container(
-                  width: 30,
-                  height: 30,
+                  width: 32,
+                  height: 32,
                   decoration: const BoxDecoration(
                     color: Color(0xFFF1F5F9),
                     shape: BoxShape.circle,
@@ -627,15 +800,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   child: IconButton(
                     onPressed: () => _deleteOrder(path, id),
                     icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFF64748B)),
-                    splashRadius: 18,
                     padding: EdgeInsets.zero,
                   ),
                 ),
               ],
             ),
           ),
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 2, 16, 16),
+            padding: const EdgeInsets.all(16),
             child: child,
           ),
         ],
@@ -643,62 +816,71 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  Widget _build3dConnector() {
-    return Container(
-      margin: const EdgeInsets.only(left: 12, top: 3, bottom: 3),
-      alignment: Alignment.centerLeft,
-      child: Container(
-        width: 2,
-        height: 12,
-        decoration: BoxDecoration(
-          color: const Color(0xFFCBD5E1),
-          borderRadius: BorderRadius.circular(1),
-        ),
-      ),
-    );
-  }
-
-  Widget _divider() => const Padding(
-    padding: EdgeInsets.symmetric(vertical: 12),
-    child: Divider(height: 1, color: Color(0xFFF1F5F9)),
-  );
-
   Widget _routeRow(IconData icon, Color color, String text) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: color, size: 14),
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: 14, color: color),
+        ),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.w700),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFF0F172A),
+              fontWeight: FontWeight.w600,
+              height: 1.3,
+            ),
           ),
         ),
       ],
     );
   }
 
-  Widget _footerRow(String price, String status, Color color) {
+  Widget _build3dConnector() {
+    return Padding(
+      padding: const EdgeInsets.only(left: 6, top: 4, bottom: 4),
+      child: Column(
+        children: List.generate(
+          3,
+              (index) => Container(
+            margin: const EdgeInsets.symmetric(vertical: 1.5),
+            width: 2.5,
+            height: 2.5,
+            decoration: const BoxDecoration(
+              color: Color(0xFFCBD5E1),
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _divider() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 14),
+      child: Divider(height: 1, color: Color(0xFFF1F5F9)),
+    );
+  }
+
+  Widget _footerRow(String total, Color color) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          '$price Руб',
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF0F172A), letterSpacing: -0.5),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: color.withValues(alpha: 0.2)),
-          ),
-          child: Text(
-            _translateStatus(status).toUpperCase(),
-            style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5),
-          ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Итого', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8), fontWeight: FontWeight.w600)),
+            const SizedBox(height: 2),
+            Text(
+              '$total Руб',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF0F172A), letterSpacing: -0.3),
+            ),
+          ],
         ),
       ],
     );

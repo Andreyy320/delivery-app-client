@@ -4,23 +4,22 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/dish_model.dart';
 import 'package:untitled1/screens/Menu/cart_screen.dart';
 import 'package:untitled1/screens/Menu/Cart_data.dart';
-import 'package:untitled1/models/cart_item.dart' hide cart;
 
-class StroimaterialMenuScreen extends StatefulWidget {
+class RestaurantMenuScreen extends StatefulWidget {
   final String restaurantName;
   final String shopId;
 
-  const StroimaterialMenuScreen({
+  const RestaurantMenuScreen({
     super.key,
     required this.restaurantName,
     required this.shopId,
   });
 
   @override
-  State<StroimaterialMenuScreen> createState() => _StroimaterialMenuScreenState();
+  State<RestaurantMenuScreen> createState() => _RestaurantMenuScreenState();
 }
 
-class _StroimaterialMenuScreenState extends State<StroimaterialMenuScreen> {
+class _RestaurantMenuScreenState extends State<RestaurantMenuScreen> {
   final ScrollController _scrollController = ScrollController();
   final ScrollController _categoryScrollController = ScrollController();
   final Map<String, GlobalKey> _categoryKeys = {};
@@ -148,7 +147,7 @@ class _StroimaterialMenuScreenState extends State<StroimaterialMenuScreen> {
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const Center(
-              child: Text('Ошибка загрузки каталога',
+              child: Text('Ошибка загрузки',
                   style: TextStyle(color: Color(0xFF64748B))),
             );
           }
@@ -170,7 +169,6 @@ class _StroimaterialMenuScreenState extends State<StroimaterialMenuScreen> {
 
           final currentCategories =
           filteredItems.map((e) => e.category).toSet().toList();
-
           if (_categories.join() != currentCategories.join()) {
             _categories = currentCategories;
             for (var cat in _categories) {
@@ -183,7 +181,7 @@ class _StroimaterialMenuScreenState extends State<StroimaterialMenuScreen> {
 
           return Column(
             children: [
-              // ПОЛЕ ПОИСКА ТОВАРОВ
+              // ПОЛЕ ПОИСКА БЛЮД
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                 child: Container(
@@ -207,7 +205,7 @@ class _StroimaterialMenuScreenState extends State<StroimaterialMenuScreen> {
                       fontSize: 14,
                     ),
                     decoration: const InputDecoration(
-                      hintText: 'Поиск материалов, инструментов...',
+                      hintText: 'Найдите любимое блюдо...',
                       hintStyle:
                       TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
                       prefixIcon: Icon(Icons.search_rounded,
@@ -285,7 +283,7 @@ class _StroimaterialMenuScreenState extends State<StroimaterialMenuScreen> {
                   ),
                 ),
 
-              // СПИСОК ТОВАРОВ ПО КАТЕГОРИЯМ
+              // СПИСОК БЛЮД ПО КАТЕГОРИЯМ
               Expanded(
                 child: ListView.builder(
                   controller: _scrollController,
@@ -323,12 +321,12 @@ class _StroimaterialMenuScreenState extends State<StroimaterialMenuScreen> {
                           gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            childAspectRatio: 0.52, // Немого увеличили для баланса карточки
+                            childAspectRatio: 0.49,
                             crossAxisSpacing: 14,
                             mainAxisSpacing: 14,
                           ),
                           itemCount: itemsInCategory.length,
-                          itemBuilder: (context, i) => BuildingMaterialCard(
+                          itemBuilder: (context, i) => DishCardWithStatus(
                             dish: itemsInCategory[i],
                             shopId: widget.shopId,
                           ),
@@ -347,31 +345,50 @@ class _StroimaterialMenuScreenState extends State<StroimaterialMenuScreen> {
   }
 }
 
-/// Стилизованная карточка строительного товара
-class BuildingMaterialCard extends StatefulWidget {
+/// Стилизованная карточка блюда
+class DishCardWithStatus extends StatefulWidget {
   final Dish dish;
   final String shopId;
-  const BuildingMaterialCard(
+  const DishCardWithStatus(
       {required this.dish, required this.shopId, super.key});
 
   @override
-  State<BuildingMaterialCard> createState() => _BuildingMaterialCardState();
+  State<DishCardWithStatus> createState() => _DishCardWithStatusState();
 }
 
-class _BuildingMaterialCardState extends State<BuildingMaterialCard> {
+class _DishCardWithStatusState extends State<DishCardWithStatus> {
   bool _pressed = false;
+
+  String getUnit(String category) {
+    final cat = category.toLowerCase();
+    if (cat.contains('напитки') ||
+        cat.contains('сок') ||
+        cat.contains('вино') ||
+        cat.contains('кофе') ||
+        cat.contains('чай') ||
+        cat.contains('коктейли')) {
+      return "мл";
+    }
+    return "г";
+  }
+
+  void _openDetails(BuildContext context, String userId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ProductDetailsBottomSheet(
+        dish: widget.dish,
+        shopId: widget.shopId,
+        userId: userId,
+        unit: getUnit(widget.dish.category),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final userId = FirebaseAuth.instance.currentUser?.uid ?? "";
-
-    // Форматирование фасовки / объема / характеристик
-    String getSubtitleText() {
-      if (widget.dish.weight.isNotEmpty) {
-        return "Хар-ка: ${widget.dish.weight}";
-      }
-      return "";
-    }
 
     return ValueListenableBuilder<List<CartItem>>(
       valueListenable: getCart(userId, widget.shopId),
@@ -382,6 +399,7 @@ class _BuildingMaterialCardState extends State<BuildingMaterialCard> {
           onTapDown: (_) => setState(() => _pressed = true),
           onTapUp: (_) => setState(() => _pressed = false),
           onTapCancel: () => setState(() => _pressed = false),
+          onTap: () => _openDetails(context, userId),
           child: AnimatedScale(
             scale: _pressed ? 0.97 : 1.0,
             duration: const Duration(milliseconds: 120),
@@ -401,7 +419,7 @@ class _BuildingMaterialCardState extends State<BuildingMaterialCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // ИЗОБРАЖЕНИЕ С ЦЕНОЙ
+                  // ИЗОБРАЖЕНИЕ БЛЮДА С ЦЕНОЙ
                   AspectRatio(
                     aspectRatio: 1,
                     child: Container(
@@ -419,7 +437,7 @@ class _BuildingMaterialCardState extends State<BuildingMaterialCard> {
                                 widget.dish.imagePath,
                                 fit: BoxFit.cover,
                                 errorBuilder: (c, e, s) => const Icon(
-                                    Icons.build_rounded,
+                                    Icons.restaurant_rounded,
                                     color: Color(0xFF94A3B8),
                                     size: 36),
                               ),
@@ -456,19 +474,19 @@ class _BuildingMaterialCardState extends State<BuildingMaterialCard> {
                     ),
                   ),
 
-                  // ИНФОРМАЦИЯ О ТОВАРЕ
+                  // ИНФОРМАЦИЯ О БЛЮДЕ
                   Padding(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 4),
                     child: Column(
                       children: [
                         SizedBox(
-                          height: 42,
+                          height: 48,
                           child: Center(
                             child: Text(
                               widget.dish.name,
                               textAlign: TextAlign.center,
-                              maxLines: 2,
+                              maxLines: 3,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 fontSize: 13,
@@ -480,26 +498,22 @@ class _BuildingMaterialCardState extends State<BuildingMaterialCard> {
                             ),
                           ),
                         ),
-                        if (getSubtitleText().isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            getSubtitleText(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFFEA580C), // Строительный оранжевый акцент
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                            ),
+                        const SizedBox(height: 2),
+                        Text(
+                          "${widget.dish.weight} ${getUnit(widget.dish.category)}",
+                          style: const TextStyle(
+                            color: Color(0xFF6366F1),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
                           ),
-                        ],
+                        ),
                         const SizedBox(height: 4),
                         SizedBox(
-                          height: 34,
+                          height: 38,
                           child: Text(
                             widget.dish.description,
                             textAlign: TextAlign.center,
-                            maxLines: 2,
+                            maxLines: 3,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               fontSize: 10,
@@ -574,6 +588,377 @@ class _BuildingMaterialCardState extends State<BuildingMaterialCard> {
   }
 }
 
+
+
+
+
+/// Экран подробной информации о товаре (Модальное окно)
+class ProductDetailsBottomSheet extends StatefulWidget {
+  final Dish dish;
+  final String shopId;
+  final String userId;
+  final String unit;
+
+  const ProductDetailsBottomSheet({
+    super.key,
+    required this.dish,
+    required this.shopId,
+    required this.userId,
+    required this.unit,
+  });
+
+  @override
+  State<ProductDetailsBottomSheet> createState() => _ProductDetailsBottomSheetState();
+}
+
+class _ProductDetailsBottomSheetState extends State<ProductDetailsBottomSheet> {
+  // Индекс выбранного размера (0 по умолчанию)
+  int _selectedSizeIndex = 0;
+
+  // Множество выбранных названий модификаторов (допов)
+  final Set<String> _selectedModifiers = {};
+
+  /// Базовая цена выбранного размера (или дефолтная цена товара без учета допов)
+  double get _basePrice {
+    return widget.dish.sizes.isNotEmpty
+        ? widget.dish.sizes[_selectedSizeIndex].price
+        : widget.dish.price;
+  }
+
+  /// Динамический расчет итоговой цены для отображения в кнопке (База + Допы)
+  double get _calculatedPrice {
+    double modifiersSum = 0;
+    for (var modifier in widget.dish.modifiers) {
+      if (_selectedModifiers.contains(modifier.name)) {
+        modifiersSum += modifier.price;
+      }
+    }
+    return _basePrice + modifiersSum;
+  }
+
+  /// Динамическое получение веса (из выбранного размера или дефолтного)
+  String get _currentWeight {
+    if (widget.dish.sizes.isNotEmpty) {
+      return widget.dish.sizes[_selectedSizeIndex].weight;
+    }
+    return widget.dish.weight;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool hasSizes = widget.dish.sizes.isNotEmpty;
+    final bool hasModifiers = widget.dish.modifiers.isNotEmpty;
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.85,
+      ),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Ручка свайпа
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: const Color(0xFFCBD5E1),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Основной контент
+          Flexible(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Фото товара
+                  Center(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        height: 240,
+                        width: double.infinity,
+                        color: const Color(0xFFF1F5F9),
+                        child: Image.network(
+                          widget.dish.imagePath,
+                          fit: BoxFit.cover,
+                          errorBuilder: (c, e, s) => const Icon(
+                            Icons.restaurant_rounded,
+                            color: Color(0xFF94A3B8),
+                            size: 60,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Название товара
+                  Text(
+                    widget.dish.name,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF0F172A),
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Динамический вес
+                  Text(
+                    "$_currentWeight ${widget.unit}",
+                    style: const TextStyle(
+                      color: Color(0xFF6366F1),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Описание
+                  const Text(
+                    "Описание",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    widget.dish.description.isNotEmpty
+                        ? widget.dish.description
+                        : "Подробное описание этого товара пока не добавлено.",
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF64748B),
+                      height: 1.4,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+
+                  // БЛОК РАЗМЕРОВ (Рендерится только при их наличии)
+                  if (hasSizes) ...[
+                    const SizedBox(height: 24),
+                    const Text(
+                      "Размер",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: List.generate(widget.dish.sizes.length, (index) {
+                        final sizeItem = widget.dish.sizes[index];
+                        final isSelected = _selectedSizeIndex == index;
+
+                        return Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _selectedSizeIndex = index;
+                              });
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              margin: EdgeInsets.only(
+                                right: index < widget.dish.sizes.length - 1 ? 10 : 0,
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? const Color(0xFF0F172A)
+                                    : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? const Color(0xFF0F172A)
+                                      : Colors.transparent,
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                "${sizeItem.name}\n${sizeItem.price.toInt()} Руб",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: isSelected ? Colors.white : const Color(0xFF0F172A),
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13,
+                                  height: 1.25,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ],
+
+                  // БЛОК МОДИФИКАТОРОВ (Рендерится только при их наличии)
+                  if (hasModifiers) ...[
+                    const SizedBox(height: 24),
+                    const Text(
+                      "Добавить по вкусу",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Column(
+                      children: widget.dish.modifiers.map((modifier) {
+                        final isChecked = _selectedModifiers.contains(modifier.name);
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isChecked
+                                  ? const Color(0xFF6366F1)
+                                  : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: CheckboxListTile(
+                            value: isChecked,
+                            activeColor: const Color(0xFF6366F1),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                            title: Text(
+                              modifier.name,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                            secondary: Text(
+                              "+${modifier.price.toInt()} Руб",
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF6366F1),
+                              ),
+                            ),
+                            onChanged: (bool? value) {
+                              setState(() {
+                                if (value == true) {
+                                  _selectedModifiers.add(modifier.name);
+                                } else {
+                                  _selectedModifiers.remove(modifier.name);
+                                }
+                              });
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+          ),
+
+          // Кнопка добавления в корзину с динамической итоговой ценой
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, -4),
+                ),
+              ],
+            ),
+            child: SafeArea(
+              child: SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F172A),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 0,
+                  ),
+                  onPressed: () {
+                    // 1. Нормализуем shopId
+                    String? effectiveShopId = (widget.shopId == "" || widget.shopId == "null" || widget.shopId == "combined")
+                        ? null
+                        : widget.shopId;
+
+                    // 2. Имя выбранного размера
+                    String? sizeName = hasSizes ? widget.dish.sizes[_selectedSizeIndex].name : null;
+
+                    // 3. Собираем список выбранных модификаторов
+                    final chosenModifiers = widget.dish.modifiers
+                        .where((m) => _selectedModifiers.contains(m.name))
+                        .toList();
+
+                    // 4. Передаем ЧИСТУЮ базовую цену товара/размера.
+                    // Допы отправляются отдельно через параметр выбранных модификаторов.
+                    final selectedDish = Dish(
+                      name: widget.dish.name,
+                      description: widget.dish.description,
+                      price: _basePrice, // ЧИСТАЯ БАЗА (например, 110 руб вместо 140)
+                      imagePath: widget.dish.imagePath,
+                      category: widget.dish.category,
+                      weight: _currentWeight,
+                      sizes: hasSizes ? [widget.dish.sizes[_selectedSizeIndex]] : [],
+                      modifiers: [],
+                    );
+
+                    // 5. Добавляем в корзину
+                    addToCartItem(
+                      widget.userId,
+                      effectiveShopId ?? '',
+                      selectedDish,
+                      context: context,
+                      selectedSize: sizeName,
+                      selectedModifiers: chosenModifiers,
+                    );
+
+                    Navigator.pop(context);
+                  },
+                  child: Text(
+                    "Добавить в корзину • ${_calculatedPrice.toInt()} Руб",
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Иконка счетчика товаров в корзине
 Widget PositionByRelative(String count) {
   return Positioned(
@@ -582,7 +967,7 @@ Widget PositionByRelative(String count) {
     child: Container(
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: const Color(0xFFEA580C), // Строительный оранжевый акцент
+        color: const Color(0xFF6366F1),
         shape: BoxShape.circle,
         border: Border.all(color: Colors.white, width: 2),
       ),

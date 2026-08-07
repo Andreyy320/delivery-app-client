@@ -8,6 +8,6 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 🔹 Просто вызываем CategoriesPage без параметров
-    return const CategoriesPage();
+    return const RestaurantsPage();
   }
 }

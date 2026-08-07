@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // 🔹 Подключаем Firestore
 import 'Cart_data.dart';
-import '../../models/cart_item.dart';
 import 'checkout_screen.dart';
+import '../../Api_Servicess.dart'; // Подключаем сервис API для доступа к токену
 
 class CartScreen extends StatelessWidget {
   final String? shopId;
@@ -34,7 +35,14 @@ class CartScreen extends StatelessWidget {
     }
 
     final userId = user.uid;
-    final cartNotifier = getCart(userId, shopId);
+
+    // 🔹 Умное определение правильного shopId, чтобы экран не был пустым
+    String? effectiveShopId = shopId;
+    if (effectiveShopId == null || effectiveShopId.isEmpty || effectiveShopId == 'null') {
+      effectiveShopId = getExistingShopId(userId);
+    }
+
+    final cartNotifier = getCart(userId, effectiveShopId);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -59,7 +67,11 @@ class CartScreen extends StatelessWidget {
       body: ValueListenableBuilder<List<CartItem>>(
         valueListenable: cartNotifier,
         builder: (context, cart, _) {
-          if (cart.isEmpty) {
+          // 🔹 Если в текущем айдишнике пусто, проверяем общую комбинированную корзину
+          final combinedCart = getCart(userId, null).value;
+          final displayCart = cart.isNotEmpty ? cart : combinedCart;
+
+          if (displayCart.isEmpty) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -111,20 +123,23 @@ class CartScreen extends StatelessWidget {
             );
           }
 
+          // Используем реальный shopId первого товара для корректного удаления и чекаута
+          final activeShopId = effectiveShopId ?? (displayCart.isNotEmpty ? displayCart.first.shopId : '');
+
           return Column(
             children: [
               Expanded(
                 child: ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   physics: const BouncingScrollPhysics(),
-                  itemCount: cart.length,
+                  itemCount: displayCart.length,
                   itemBuilder: (context, index) {
-                    final item = cart[index];
+                    final item = displayCart[index];
                     return _buildCartItem(context, item, userId);
                   },
                 ),
               ),
-              _buildBottomSummary(context, userId, cart),
+              _buildBottomSummary(context, userId, displayCart, activeShopId),
             ],
           );
         },
@@ -133,9 +148,25 @@ class CartScreen extends StatelessWidget {
   }
 
   Widget _buildCartItem(BuildContext context, CartItem item, String userId) {
+    final sizeName = item.selectedSize;
+    final hasModifiers = item.selectedModifiers != null && item.selectedModifiers!.isNotEmpty;
+
+    double singleItemPriceWithMods = item.dish.price;
+    if (hasModifiers) {
+      for (var mod in item.selectedModifiers!) {
+        if (mod is Map) {
+          singleItemPriceWithMods += double.tryParse(mod['price']?.toString() ?? '0') ?? 0.0;
+        } else {
+          try {
+            singleItemPriceWithMods += double.tryParse((mod as dynamic).price.toString()) ?? 0.0;
+          } catch (_) {}
+        }
+      }
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(22),
@@ -148,113 +179,220 @@ class CartScreen extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 75,
-            height: 75,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: item.dish.imagePath.isNotEmpty
-                  ? (item.dish.imagePath.startsWith('http')
-                  ? Image.network(
-                item.dish.imagePath,
-                fit: BoxFit.cover,
-                errorBuilder: (c, e, s) => const Icon(
-                  Icons.shopping_bag_rounded,
-                  color: Color(0xFF94A3B8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-              )
-                  : Image.asset(
-                item.dish.imagePath,
-                fit: BoxFit.cover,
-                errorBuilder: (c, e, s) => const Icon(
-                  Icons.shopping_bag_rounded,
-                  color: Color(0xFF94A3B8),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: item.dish.imagePath.isNotEmpty
+                      ? (item.dish.imagePath.startsWith('http')
+                      ? Image.network(
+                    item.dish.imagePath,
+                    fit: BoxFit.cover,
+                    errorBuilder: (c, e, s) => const Icon(
+                      Icons.shopping_bag_rounded,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  )
+                      : Image.asset(
+                    item.dish.imagePath,
+                    fit: BoxFit.cover,
+                    errorBuilder: (c, e, s) => const Icon(
+                      Icons.shopping_bag_rounded,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ))
+                      : const Icon(
+                    Icons.shopping_bag_rounded,
+                    color: Color(0xFF94A3B8),
+                  ),
                 ),
-              ))
-                  : const Icon(
-                Icons.shopping_bag_rounded,
-                color: Color(0xFF94A3B8),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.dish.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        color: Color(0xFF0F172A),
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    if (sizeName != null || (item.dish.weight.isNotEmpty && item.dish.weight != '0'))
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          [
+                            if (sizeName != null) 'Размер: $sizeName',
+                            if (item.dish.weight.isNotEmpty && item.dish.weight != '0') 'Вес: ${item.dish.weight}'
+                          ].join(' • '),
+                          style: const TextStyle(
+                            color: Color(0xFF475569),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.dish.name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                    color: Color(0xFF0F172A),
-                    height: 1.2,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '${item.dish.price.toInt()} Руб',
-                  style: const TextStyle(
-                    color: Color(0xFF6366F1),
-                    fontWeight: FontWeight.w900,
-                    fontSize: 15,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.black.withOpacity(0.05)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _qtyButton(
-                  icon: item.quantity == 1
-                      ? Icons.delete_outline_rounded
-                      : Icons.remove_rounded,
-                  color: item.quantity == 1
-                      ? const Color(0xFFEF4444)
-                      : const Color(0xFF0F172A),
-                  bgColor: item.quantity == 1
-                      ? const Color(0xFFFEF2F2)
-                      : Colors.white,
-                  onTap: () => removeFromCart(userId, item.shopId, item),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Text(
-                    '${item.quantity}',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF0F172A),
+
+          if (hasModifiers) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0), width: 0.8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Дополнительно:',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF94A3B8),
                     ),
                   ),
-                ),
-                _qtyButton(
-                  icon: Icons.add_rounded,
-                  color: const Color(0xFF0F172A),
-                  bgColor: Colors.white,
-                  onTap: () => addToCartItem(userId, item.shopId, item.dish),
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  ...item.selectedModifiers!.map((mod) {
+                    String modName = '';
+                    double modPrice = 0.0;
+
+                    if (mod is Map) {
+                      modName = mod['name']?.toString() ?? '';
+                      modPrice = double.tryParse(mod['price']?.toString() ?? '0') ?? 0.0;
+                    } else {
+                      try {
+                        modName = (mod as dynamic).name.toString();
+                        modPrice = double.tryParse((mod as dynamic).price.toString()) ?? 0.0;
+                      } catch (_) {
+                        modName = mod.toString();
+                      }
+                    }
+
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '• $modName',
+                              style: const TextStyle(
+                                color: Color(0xFF334155),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          if (modPrice > 0)
+                            Text(
+                              '+${modPrice.toInt()} Руб',
+                              style: const TextStyle(
+                                color: Color(0xFF6366F1),
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
             ),
+          ],
+
+          const SizedBox(height: 12),
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          const SizedBox(height: 10),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${(singleItemPriceWithMods * item.quantity).toInt()} Руб',
+                style: const TextStyle(
+                  color: Color(0xFF0F172A),
+                  fontWeight: FontWeight.w900,
+                  fontSize: 16,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.black.withOpacity(0.05)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _qtyButton(
+                      icon: item.quantity == 1
+                          ? Icons.delete_outline_rounded
+                          : Icons.remove_rounded,
+                      color: item.quantity == 1
+                          ? const Color(0xFFEF4444)
+                          : const Color(0xFF0F172A),
+                      bgColor: item.quantity == 1
+                          ? const Color(0xFFFEF2F2)
+                          : Colors.white,
+                      onTap: () => removeFromCart(userId, item.shopId, item),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text(
+                        '${item.quantity}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                    ),
+                    _qtyButton(
+                      icon: Icons.add_rounded,
+                      color: const Color(0xFF0F172A),
+                      bgColor: Colors.white,
+                      onTap: () => addToCartItem(
+                        userId,
+                        item.shopId,
+                        item.dish,
+                        selectedSize: item.selectedSize,
+                        selectedModifiers: item.selectedModifiers,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -262,10 +400,13 @@ class CartScreen extends StatelessWidget {
   }
 
   Widget _buildBottomSummary(
-      BuildContext context, String userId, List<CartItem> cart) {
-    final currentShopId = shopId ?? (cart.isNotEmpty ? cart.first.shopId : '');
+      BuildContext context, String userId, List<CartItem> cart, String activeShopId) {
     final currentRestaurantName = restaurantName ?? 'Заказ из заведения';
-    final double currentTotal = getCartTotal(userId, shopId);
+    final double currentTotal = getCartTotal(userId, activeShopId);
+
+    // Получаем текущий список отображаемых товаров для передачи дальше
+    final combinedCart = getCart(userId, null).value;
+    final displayCart = cart.isNotEmpty ? cart : combinedCart;
 
     return SafeArea(
       bottom: true,
@@ -322,7 +463,7 @@ class CartScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: IconButton(
-                    onPressed: () => clearCart(userId, shopId),
+                    onPressed: () => clearCart(userId, activeShopId),
                     icon: const Icon(
                       Icons.delete_sweep_outlined,
                       color: Color(0xFF64748B),
@@ -351,16 +492,52 @@ class CartScreen extends StatelessWidget {
                       ],
                     ),
                     child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => CheckoutScreen(
-                              shopId: currentShopId,
-                              restaurantName: currentRestaurantName,
+                      onPressed: () async {
+                        // 🔹 Получаем токен из сервиса
+                        final token = AddressApiService.authToken ?? '';
+
+                        // Переменные координат ресторана по умолчанию (Тирасполь)
+                        double resLat = 46.838444;
+                        double resLng = 29.588252;
+
+                        // 🔹 Извлекаем точные координаты заведения из коллекции categories
+                        if (activeShopId.isNotEmpty) {
+                          try {
+                            final doc = await FirebaseFirestore.instance
+                                .collection('categories')
+                                .doc(activeShopId)
+                                .get();
+
+                            if (doc.exists && doc.data() != null) {
+                              final data = doc.data()!;
+                              if (data['lat'] != null) {
+                                resLat = double.tryParse(data['lat'].toString()) ?? resLat;
+                              }
+                              if (data['lng'] != null) {
+                                resLng = double.tryParse(data['lng'].toString()) ?? resLng;
+                              }
+                            }
+                          } catch (e) {
+                            debugPrint('Ошибка получения координат ресторана из Firestore: $e');
+                          }
+                        }
+
+                        if (context.mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => CheckoutScreen(
+                                shopId: activeShopId,
+                                restaurantName: currentRestaurantName,
+                                apiToken: token,
+                                restaurantLat: resLat,
+                                restaurantLng: resLng,
+                                cartItems: displayCart,       // 👈 Передаем список товаров
+                                productsTotal: currentTotal,  // 👈 Передаем общую сумму товаров
+                              ),
                             ),
-                          ),
-                        );
+                          );
+                        }
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.transparent,

@@ -11,7 +11,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
 
+import '../../Api_Servicess.dart';
 import 'business_orders_screen.dart';
 import 'business_stop_list_screen.dart';
 
@@ -27,7 +29,7 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
   final String _imgBBKey = "19b9ece492b6e9cf40bd22859665516b";
 
   final _nameController = TextEditingController();
-  final _addressController = TextEditingController(); // Скрытое поле, куда сохраняется адрес с карты
+  final _addressController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _timeController = TextEditingController();
@@ -145,11 +147,11 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
         content: const Row(
           children: [
             Icon(Icons.check_circle_outline_rounded, color: Colors.white),
-            SizedBox(width: 10),
+            const SizedBox(width: 10),
             Text("Заявка успешно отправлена!", style: TextStyle(fontWeight: FontWeight.w600)),
           ],
         ),
-        backgroundColor: const Color(0xFF10B981),
+        backgroundColor: const Color(0xFF2563EB),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         margin: const EdgeInsets.all(16),
@@ -205,9 +207,9 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
     final user = FirebaseAuth.instance.currentUser;
     return Theme(
       data: ThemeData.light().copyWith(
-        scaffoldBackgroundColor: const Color(0xFFF1F5F9),
+        scaffoldBackgroundColor: const Color(0xFFF8FAFC),
         colorScheme: const ColorScheme.light(
-          primary: Color(0xFF10B981),
+          primary: Color(0xFF2563EB),
           surface: Colors.white,
         ),
       ),
@@ -216,7 +218,7 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
           stream: FirebaseFirestore.instance.collection('business_requests').where('userId', isEqualTo: user?.uid).snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator(color: Color(0xFF10B981)));
+              return const Center(child: CircularProgressIndicator(color: Color(0xFF2563EB)));
             }
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return _buildRegistrationForm();
             var requestData = snapshot.data!.docs.first.data() as Map<String, dynamic>;
@@ -252,8 +254,8 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
   Widget _buildBackgroundGlows() {
     return Stack(
       children: [
-        Positioned(top: -100, right: -100, child: Container(width: 300, height: 300, decoration: BoxDecoration(color: const Color(0xFF10B981).withValues(alpha: 0.05), shape: BoxShape.circle))),
-        Positioned(bottom: -150, left: -100, child: Container(width: 350, height: 350, decoration: BoxDecoration(color: const Color(0xFF3B82F6).withValues(alpha: 0.05), shape: BoxShape.circle))),
+        Positioned(top: -100, right: -100, child: Container(width: 300, height: 300, decoration: BoxDecoration(color: const Color(0xFF2563EB).withValues(alpha: 0.05), shape: BoxShape.circle))),
+        Positioned(bottom: -150, left: -100, child: Container(width: 350, height: 350, decoration: BoxDecoration(color: const Color(0xFF4F46E5).withValues(alpha: 0.05), shape: BoxShape.circle))),
       ],
     );
   }
@@ -325,8 +327,8 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
           children: [
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: const Color(0xFF0284C7).withValues(alpha: 0.1), shape: BoxShape.circle),
-              child: Icon(icon, color: const Color(0xFF0284C7), size: 24),
+              decoration: BoxDecoration(color: const Color(0xFF2563EB).withValues(alpha: 0.1), shape: BoxShape.circle),
+              child: Icon(icon, color: const Color(0xFF2563EB), size: 24),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -353,8 +355,8 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
-          gradient: const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF059669)]),
-          boxShadow: [BoxShadow(color: const Color(0xFF10B981).withValues(alpha: 0.35), blurRadius: 20, offset: const Offset(0, 8))],
+          gradient: const LinearGradient(colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)]),
+          boxShadow: [BoxShadow(color: const Color(0xFF2563EB).withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 8))],
         ),
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(
@@ -371,7 +373,67 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
     );
   }
 
-  // --- 1. ВАУ-ПАРТНЕРСКИЙ ДАШБОРД ---
+  Widget _buildModernField(TextEditingController controller, String label, IconData icon, {TextInputType? keyboardType, String? prefix}) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF0F172A), fontSize: 14),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.w600, fontSize: 13),
+        prefixIcon: Icon(icon, color: const Color(0xFF64748B), size: 20),
+        prefixText: prefix,
+        prefixStyle: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF0F172A), fontSize: 14),
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5)),
+        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: Color(0xFFEF4444))),
+      ),
+      validator: (value) => (value == null || value.trim().isEmpty) ? 'Поле обязательно для заполнения' : null,
+    );
+  }
+
+  Widget _buildCategoryChips() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        children: _categoryKeys.keys.map((catName) {
+          bool isSelected = _selectedCategoryName == catName;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: InkWell(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _selectedCategoryName = catName);
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(_categoryIcons[catName], size: 16, color: isSelected ? Colors.white : const Color(0xFF64748B)),
+                    const SizedBox(width: 6),
+                    Text(catName, style: TextStyle(color: isSelected ? Colors.white : const Color(0xFF0F172A), fontWeight: FontWeight.w700, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   Widget _buildPartnerDashboard(Map<String, dynamic> data, String docId) {
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -389,7 +451,7 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
             padding: const EdgeInsets.only(right: 16),
             child: _buildIconButton(
               icon: Icons.language_rounded,
-              color: const Color(0xFF0284C7),
+              color: const Color(0xFF2563EB),
               onTap: _openWebPanel,
             ),
           )
@@ -428,17 +490,17 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                                  color: const Color(0xFF2563EB).withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: const Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    CircleAvatar(radius: 4, backgroundColor: Color(0xFF10B981)),
+                                    CircleAvatar(radius: 4, backgroundColor: Color(0xFF60A5FA)),
                                     SizedBox(width: 6),
                                     Text(
                                       "PARTNER VERIFIED",
-                                      style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF34D399), fontSize: 10, letterSpacing: 1),
+                                      style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF93C5FD), fontSize: 10, letterSpacing: 1),
                                     ),
                                   ],
                                 ),
@@ -453,10 +515,10 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
                         Container(
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF059669)]),
+                            gradient: const LinearGradient(colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)]),
                             shape: BoxShape.circle,
                             boxShadow: [
-                              BoxShadow(color: const Color(0xFF10B981).withValues(alpha: 0.4), blurRadius: 12, spreadRadius: 2)
+                              BoxShadow(color: const Color(0xFF2563EB).withValues(alpha: 0.4), blurRadius: 12, spreadRadius: 2)
                             ],
                           ),
                           child: const Icon(Icons.check_rounded, color: Colors.white, size: 28),
@@ -520,7 +582,6 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
     );
   }
 
-  // --- 2. ЭКРАН СТАТУСА ---
   Widget _buildStatusScreen(Map<String, dynamic> data, String docId) {
     bool isRejected = (data['status'] ?? 'pending') == 'rejected';
     Color statusColor = isRejected ? const Color(0xFFEF4444) : const Color(0xFFF59E0B);
@@ -584,7 +645,6 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
     );
   }
 
-  // --- 3. ВАУ-ФОРМА РЕГИСТРАЦИИ ---
   Widget _buildRegistrationForm() {
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -631,8 +691,6 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
                       ),
                     ),
                     const SizedBox(height: 12),
-
-                    // Секция 1: Брендинг
                     _buildGlassCard(
                       title: "О БИЗНЕСЕ",
                       children: [
@@ -647,12 +705,12 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(32),
                                 border: Border.all(
-                                  color: _selectedImage != null ? const Color(0xFF10B981) : const Color(0xFFE2E8F0),
+                                  color: _selectedImage != null ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
                                   width: 2,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: _selectedImage != null ? const Color(0xFF10B981).withValues(alpha: 0.25) : Colors.black.withValues(alpha: 0.04),
+                                    color: _selectedImage != null ? const Color(0xFF2563EB).withValues(alpha: 0.25) : Colors.black.withValues(alpha: 0.04),
                                     blurRadius: 20,
                                     offset: const Offset(0, 8),
                                   )
@@ -669,10 +727,10 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
                                   Container(
                                     padding: const EdgeInsets.all(12),
                                     decoration: const BoxDecoration(
-                                      color: Color(0xFFECFDF5),
+                                      color: Color(0xFFEFF6FF),
                                       shape: BoxShape.circle,
                                     ),
-                                    child: const Icon(Icons.add_a_photo_rounded, color: Color(0xFF10B981), size: 24),
+                                    child: const Icon(Icons.add_a_photo_rounded, color: Color(0xFF2563EB), size: 24),
                                   ),
                                   const SizedBox(height: 8),
                                   const Text("Загрузить лого", style: TextStyle(color: Color(0xFF64748B), fontSize: 11, fontWeight: FontWeight.bold)),
@@ -690,19 +748,17 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
                       ],
                     ),
                     const SizedBox(height: 16),
-
-                    // Секция 2: Контакты
                     _buildGlassCard(
                       title: "КОНТАКТНЫЕ ДАННЫЕ",
                       children: [
                         _buildModernField(_emailController, 'Email для связи', Icons.alternate_email_rounded, keyboardType: TextInputType.emailAddress),
                         const SizedBox(height: 14),
                         _buildModernField(_phoneController, 'Номер телефона', Icons.phone_android_rounded, prefix: '+373 ', keyboardType: TextInputType.phone),
+                        const SizedBox(height: 14),
+                        _buildModernField(_timeController, 'График работы (например: 09:00 - 22:00)', Icons.access_time_rounded),
                       ],
                     ),
                     const SizedBox(height: 16),
-
-                    // Секция 3: Локация
                     _buildGlassCard(
                       title: "ЛОКАЦИЯ И ГРАФИК",
                       children: [
@@ -713,10 +769,10 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
                             duration: const Duration(milliseconds: 200),
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                             decoration: BoxDecoration(
-                              color: _lat != null ? const Color(0xFFECFDF5) : const Color(0xFFF8FAFC),
+                              color: _lat != null ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: _lat != null ? const Color(0xFF10B981) : const Color(0xFFE2E8F0),
+                                color: _lat != null ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
                                 width: _lat != null ? 1.5 : 1,
                               ),
                             ),
@@ -725,7 +781,7 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
                                 Container(
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: _lat != null ? const Color(0xFF10B981) : const Color(0xFFE2E8F0),
+                                    color: _lat != null ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Icon(Icons.map_rounded, color: _lat != null ? Colors.white : const Color(0xFF64748B), size: 20),
@@ -738,43 +794,39 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
                                       Text(
                                         _lat != null ? 'Точка установлена' : 'Указать на карте',
                                         style: TextStyle(
-                                          color: _lat != null ? const Color(0xFF059669) : const Color(0xFF0F172A),
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 13,
+                                          color: _lat != null ? const Color(0xFF1E40AF) : const Color(0xFF0F172A),
                                         ),
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        _addressController.text.isNotEmpty ? _addressController.text : 'Обязательно для работы курьеров',
-                                        style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
-                                        maxLines: 2,
+                                        _lat != null ? _addressController.text : 'Нажмите, чтобы выбрать адрес',
+                                        maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(fontSize: 11, color: _lat != null ? const Color(0xFF1D4ED8) : const Color(0xFF64748B)),
                                       ),
                                     ],
                                   ),
                                 ),
                                 Icon(
-                                  _lat != null ? Icons.check_circle_rounded : Icons.arrow_forward_ios_rounded,
-                                  color: _lat != null ? const Color(0xFF10B981) : const Color(0xFF94A3B8),
-                                  size: 18,
+                                  Icons.arrow_forward_ios_rounded,
+                                  size: 14,
+                                  color: _lat != null ? const Color(0xFF2563EB) : const Color(0xFF94A3B8),
                                 ),
                               ],
                             ),
                           ),
                         ),
-                        const SizedBox(height: 14),
-                        _buildModernField(_timeController, 'Режим работы (например: 09:00 - 23:00)', Icons.access_time_filled_rounded),
                       ],
                     ),
-                    const SizedBox(height: 28),
-
-                    // Кнопка
+                    const SizedBox(height: 32),
                     _buildGlowButton(
                       text: "ОТПРАВИТЬ ЗАЯВКУ",
+                      onPressed: _sendApplication,
                       isLoading: isLoading,
-                      onPressed: isLoading ? null : _sendApplication,
                     ),
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),
@@ -784,79 +836,11 @@ class _BusinessRegistrationScreenState extends State<BusinessRegistrationScreen>
       ),
     );
   }
-
-  Widget _buildCategoryChips() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      physics: const BouncingScrollPhysics(),
-      child: Row(
-        children: _categoryKeys.keys.map((catName) {
-          bool isSelected = _selectedCategoryName == catName;
-          return Padding(
-            padding: const EdgeInsets.only(right: 10),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              child: ChoiceChip(
-                showCheckmark: false,
-                elevation: isSelected ? 4 : 0,
-                shadowColor: const Color(0xFF10B981).withValues(alpha: 0.4),
-                avatar: Icon(_categoryIcons[catName], size: 18, color: isSelected ? Colors.white : const Color(0xFF64748B)),
-                label: Text(catName),
-                selected: isSelected,
-                selectedColor: const Color(0xFF10B981),
-                backgroundColor: const Color(0xFFF1F5F9),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                labelStyle: TextStyle(
-                  color: isSelected ? Colors.white : const Color(0xFF334155),
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(color: isSelected ? const Color(0xFF10B981) : Colors.transparent),
-                ),
-                onSelected: (selected) {
-                  if (selected) {
-                    HapticFeedback.selectionClick();
-                    setState(() => _selectedCategoryName = catName);
-                  }
-                },
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildModernField(TextEditingController controller, String label, IconData icon, {TextInputType keyboardType = TextInputType.text, String? prefix}) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w600, fontSize: 15),
-      validator: (v) => v == null || v.trim().isEmpty ? 'Заполните поле' : null,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixText: prefix,
-        prefixStyle: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 15),
-        labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13, fontWeight: FontWeight.w500),
-        prefixIcon: Icon(icon, color: const Color(0xFF94A3B8), size: 20),
-        filled: true,
-        fillColor: const Color(0xFFF8FAFC),
-        contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: Color(0xFF10B981), width: 1.5)),
-        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: Color(0xFFEF4444))),
-        focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.5)),
-      ),
-    );
-  }
 }
 
-// --- ЕДИНЫЙ ПРЕМИАЛЬНЫЙ ЭКРАН ВЫБОРА КООРДИНАТ НА КАРТЕ ---
+// --- Ускоренный экран выбора точки на карте ---
 class _SelectLocationScreen extends StatefulWidget {
-  final LatLng? initialLocation;
-  const _SelectLocationScreen({this.initialLocation});
+  const _SelectLocationScreen();
 
   @override
   State<_SelectLocationScreen> createState() => _SelectLocationScreenState();
@@ -864,17 +848,88 @@ class _SelectLocationScreen extends StatefulWidget {
 
 class _SelectLocationScreenState extends State<_SelectLocationScreen> {
   final MapController _mapController = MapController();
-
-  late LatLng _currentCenterCoord;
-  String? _resolvedAddress;
+  LatLng _pickedLocation = const LatLng(46.9856, 28.8585); // Мгновенный старт (дефолтные координаты)
   bool _isLoadingAddress = false;
+  String _addressText = "Переместите карту для выбора адреса";
+
   Timer? _debounceTimer;
 
   @override
   void initState() {
     super.initState();
-    _currentCenterCoord = widget.initialLocation ?? const LatLng(46.8410, 29.6470);
-    _onMapPositionChanged(_currentCenterCoord, true);
+    // Запускаем геопозицию АСИНХРОННО в фоне после отрисовки экрана,
+    // чтобы открытие окна вообще не задерживалось.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _determineInitialPositionFast();
+    });
+  }
+
+  Future<void> _determineInitialPositionFast() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) return;
+      }
+      if (permission == LocationPermission.deniedForever) return;
+
+      // Быстрый запрос последней известной позиции (без ожидания спутников)
+      Position? position = await Geolocator.getLastKnownPosition();
+      position ??= await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.low,
+        timeLimit: const Duration(seconds: 2),
+      );
+
+      LatLng currentLatLng = LatLng(position.latitude, position.longitude);
+
+      if (mounted) {
+        setState(() {
+          _pickedLocation = currentLatLng;
+        });
+        _mapController.move(currentLatLng, 15.0);
+        _getAddressFromApi(currentLatLng);
+      }
+    } catch (e) {
+      debugPrint("Fast location error: $e");
+    }
+  }
+
+  Future<void> _getAddressFromApi(LatLng latLng) async {
+    setState(() => _isLoadingAddress = true);
+    try {
+      final result = await AddressApiService.locateAddress(latLng.latitude, latLng.longitude);
+
+      if (mounted && result != null) {
+        final addressName = result['name'] ?? result['address'] ?? result['display_name'] ?? 'Адрес найден';
+        setState(() => _addressText = addressName.toString());
+      } else if (mounted) {
+        setState(() => _addressText = "Адрес не найден");
+      }
+    } catch (e) {
+      if (mounted) setState(() => _addressText = "Ошибка определения адреса");
+    } finally {
+      if (mounted) setState(() => _isLoadingAddress = false);
+    }
+  }
+
+  // Оптимизация: Запрос к API улетает только тогда, когда пользователь
+  // перестал двигать карту (debounce 400мс), что полностью убирает лаги при скролле.
+  // Обновленный метод для отслеживания движения камеры
+  void _onPositionChanged(MapCamera camera, bool hasGesture) {
+    if (hasGesture) {
+      final center = camera.center;
+      setState(() {
+        _pickedLocation = center;
+      });
+
+      if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
+      _debounceTimer = Timer(const Duration(milliseconds: 400), () {
+        _getAddressFromApi(_pickedLocation);
+      });
+    }
   }
 
   @override
@@ -883,251 +938,124 @@ class _SelectLocationScreenState extends State<_SelectLocationScreen> {
     super.dispose();
   }
 
-  void _onMapPositionChanged(LatLng center, bool isInitial) {
-    setState(() {
-      _currentCenterCoord = center;
-      if (!isInitial) {
-        _isLoadingAddress = true;
-        _resolvedAddress = 'Определяем точный адрес...';
-      }
-    });
-
-    if (isInitial) {
-      _fetchAddressFromCoordinates(center);
-    } else {
-      _debounceTimer?.cancel();
-      _debounceTimer = Timer(const Duration(milliseconds: 500), () {
-        _fetchAddressFromCoordinates(center);
-      });
-    }
-  }
-
-  Future<void> _fetchAddressFromCoordinates(LatLng latLng) async {
-    try {
-      final url = Uri.parse(
-        'https://nominatim.openstreetmap.org/reverse?format=json&lat=${latLng.latitude}&lon=${latLng.longitude}&accept-language=ru&addressdetails=1',
-      );
-
-      final response = await http.get(
-        url,
-        headers: {'User-Agent': 'FlutterAppBusinessOrder/1.0'},
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final address = data['address'] as Map<String, dynamic>?;
-
-        if (address != null) {
-          String road = address['road'] ?? address['pedestrian'] ?? address['street'] ?? address['path'] ?? '';
-          String houseNumber = address['house_number'] ?? address['building'] ?? '';
-          String suburb = address['suburb'] ?? address['neighbourhood'] ?? address['city_district'] ?? '';
-          String city = address['city'] ?? address['town'] ?? address['village'] ?? address['hamlet'] ?? address['county'] ?? '';
-
-          List<String> parts = [];
-          if (road.isNotEmpty) {
-            if (houseNumber.isNotEmpty) {
-              parts.add('$road, $houseNumber');
-            } else {
-              parts.add(road);
-            }
-          } else if (suburb.isNotEmpty) {
-            parts.add(suburb);
-          }
-
-          if (city.isNotEmpty && !parts.contains(city)) {
-            parts.add(city);
-          }
-
-          if (mounted) {
-            setState(() {
-              if (parts.isNotEmpty) {
-                _resolvedAddress = parts.join(', ');
-              } else {
-                String rawName = data['display_name'] ?? '';
-                List<String> splitName = rawName.split(', ');
-                if (splitName.length > 3) splitName.removeLast();
-                _resolvedAddress = splitName.isNotEmpty ? splitName.join(', ') : 'Координаты: ${latLng.latitude.toStringAsFixed(4)}, ${latLng.longitude.toStringAsFixed(4)}';
-              }
-            });
-          }
-        } else {
-          if (mounted) {
-            setState(() {
-              _resolvedAddress = '${latLng.latitude.toStringAsFixed(5)}, ${latLng.longitude.toStringAsFixed(5)}';
-            });
-          }
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _resolvedAddress = '${latLng.latitude.toStringAsFixed(5)}, ${latLng.longitude.toStringAsFixed(5)} (Лимит)';
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('Ошибка геокодинга: $e');
-      if (mounted) {
-        setState(() {
-          _resolvedAddress = '${latLng.latitude.toStringAsFixed(5)}, ${latLng.longitude.toStringAsFixed(5)}';
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoadingAddress = false;
-        });
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text(
-          'Укажите заведение на карте',
-          style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w900, fontSize: 18),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
-      ),
       body: Stack(
         children: [
-          // Карта с кастомными тайлами
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: _currentCenterCoord,
-              initialZoom: 16,
-              onPositionChanged: (position, hasGesture) {
-                if (hasGesture && position.center != null) {
-                  _onMapPositionChanged(position.center!, false);
-                }
-              },
+              initialCenter: _pickedLocation,
+              initialZoom: 15.0,
+              onPositionChanged: _onPositionChanged,
             ),
             children: [
               TileLayer(
                 urlTemplate: 'https://map.99993.ru:1443/styles/openstreetmap/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.food_delivery',
+                // Дополнительные параметры для кэширования и скорости тайлов:
+                tileProvider: NetworkTileProvider(),
               ),
             ],
           ),
-
-          // Роскошная зеленая булавка строго по центру экрана
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.only(bottom: 38),
-              child: Icon(
-                Icons.location_on_rounded,
-                color: Color(0xFF10B981),
-                size: 52,
-              ),
-            ),
-          ),
-
-          // Премиальная плашка с отображением найденного адреса сверху карты
-          Positioned(
-            top: 16,
-            left: 20,
-            right: 20,
+          // Миниатюрная синяя точка по центру экрана
+           Center(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              width: 16,
+              height: 16,
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
+                color: Color(0xFF2563EB),
+                shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF0F172A).withValues(alpha: 0.08),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
+                    color: Colors.black26,
+                    blurRadius: 6,
+                    spreadRadius: 2,
                   ),
                 ],
               ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.place_rounded, color: Color(0xFF10B981), size: 20),
+              child: Center(
+                child: Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      _resolvedAddress ?? 'Переместите карту для выбора...',
-                      style: const TextStyle(
-                        color: Color(0xFF0F172A),
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (_isLoadingAddress) ...[
-                    const SizedBox(width: 12),
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF10B981)),
-                    ),
-                  ],
-                ],
+                ),
               ),
             ),
           ),
-
-          // Кнопка подтверждения точки с передачей Map (координаты + адрес)
+          // Верхняя кнопка назад
           Positioned(
-            bottom: 24,
+            top: MediaQuery.of(context).padding.top + 10,
             left: 20,
-            right: 20,
+            child: CircleAvatar(
+              backgroundColor: Colors.white,
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Color(0xFF0F172A)),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ),
+          // Нижняя панель с выбранным адресом
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
             child: SafeArea(
-              child: SizedBox(
-                height: 56,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 child: Container(
+                  padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF10B981), Color(0xFF059669)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
                     boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.35),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
-                      ),
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, 5)),
                     ],
                   ),
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                    ),
-                    onPressed: () {
-                      // Возвращаем Map, как и ожидает основной экран регистрации
-                      Navigator.pop(context, {
-                        'latLng': _currentCenterCoord,
-                        'address': _resolvedAddress ?? '',
-                      });
-                    },
-                    child: const Text(
-                      'ПОДТВЕРДИТЬ ТОЧКУ ЗАВЕДЕНИЯ',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 15,
-                        letterSpacing: 0.8,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text("Выбранный адрес:", style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on_rounded, color: Color(0xFF2563EB), size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _isLoadingAddress ? "Определение адреса..." : _addressText,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: Color(0xFF0F172A)),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2563EB),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            elevation: 0,
+                          ),
+                          onPressed: () {
+                            Navigator.pop(context, {
+                              'latLng': _pickedLocation,
+                              'address': _addressText,
+                            });
+                          },
+                          child: const Text("ПОДТВЕРДИТЬ ТОЧКУ", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

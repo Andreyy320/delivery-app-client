@@ -40,8 +40,10 @@ dependencies:
   firebase_auth: ^4.6.0
   image_picker: ^1.0.7
   firebase_storage: ^11.7.7
+  postgres: ^3.2.0 # или актуальная версия
   crypto: ^3.0.3
-  geolocator: ^11.0.0
+  geolocator: ^12.0.0
+  flutter_polyline_points: ^2.0.0
   async: ^2.11.0
   connectivity_plus: ^6.0.3
   flutter_local_notifications: ^17.0.0 # Замените на актуальную версию

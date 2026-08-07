@@ -67,7 +67,7 @@ class OrdersService {
         required String restaurantName,
         required String shopId,
         required String category,
-        String type = '', // 🔹 Добавили параметр типа заказа (по умолчанию 'food')
+        String type = '', // 🔹 Тип заказа
         String comment = '', // Комментарий курьеру
         String restaurantComment = 'standard_order ', // Комментарий для заведения
         String paymentMethod = 'cash',
@@ -103,6 +103,8 @@ class OrdersService {
       'restaurantName': restaurantName,
       'category': category,
       'type': type, // 🔹 Сохраняем тип заказа в базу данных
+
+      // 🔹 Корректно сохраняем товары с учетом выбранного размера и выбранных модификаторов
       'items': cart.map((item) => {
         'name': item.dish.name,
         'price': item.dish.price,
@@ -110,6 +112,29 @@ class OrdersService {
         'description': item.dish.description,
         'category': item.dish.category,
         'imagePath': item.dish.imagePath,
+
+        // ✅ Сохраняем реальный выбранный размер из элемента корзины
+        'size': item.selectedSize,
+        'selectedSize': item.selectedSize, // Дублируем для совместимости
+
+        // ✅ Сохраняем только выбранные пользователем модификаторы
+        'modifiers': item.selectedModifiers?.map((mod) {
+          if (mod is Map) {
+            return {
+              'name': mod['name']?.toString() ?? '',
+              'price': double.tryParse(mod['price']?.toString() ?? '0') ?? 0.0,
+            };
+          } else {
+            try {
+              return {
+                'name': (mod as dynamic).name.toString(),
+                'price': double.tryParse((mod as dynamic).price.toString()) ?? 0.0,
+              };
+            } catch (_) {
+              return {'name': mod.toString(), 'price': 0.0};
+            }
+          }
+        }).toList() ?? [],
       }).toList(),
 
       'itemsPrice': itemsPrice,

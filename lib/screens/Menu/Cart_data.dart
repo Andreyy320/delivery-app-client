@@ -5,12 +5,83 @@ class CartItem {
   final Dish dish;
   int quantity;
   final String shopId;
+  final String? selectedSize;        // Поле размера
+  final List<dynamic>? selectedModifiers; // Поле модификаторов
 
   CartItem({
     required this.dish,
     this.quantity = 1,
     required this.shopId,
+    this.selectedSize,
+    this.selectedModifiers,
   });
+
+  // Удобные геттеры для совместимости со всеми возможными вариантами в UI
+  List<dynamic>? get modifiers => selectedModifiers;
+  List<dynamic>? get addons => selectedModifiers;
+  List<dynamic>? get selectedAddons => selectedModifiers;
+
+  // Удобный геттер для совместимости со словом size и selectedSizeName
+  String? get size => selectedSize;
+  String? get selectedSizeName => selectedSize; // 👈 Добавлено для полной совместимости
+
+
+
+  // 🔹 Метод для безопасного преобразования в Map<String, dynamic>
+  Map<String, dynamic> toMap() {
+    return {
+      'dish': dish,
+      'quantity': quantity,
+      'shopId': shopId,
+      'selectedSize': selectedSize,
+      'size': selectedSize,
+      'modifiers': selectedModifiers,
+      'selectedModifiers': selectedModifiers,
+      'addons': selectedModifiers,
+      'selectedAddons': selectedModifiers,
+    };
+  }
+
+  // 🔹 Добавляем поддержку оператора '[]', чтобы старый код с item['...'] не выдавал ошибок
+  dynamic operator [](String key) {
+    switch (key) {
+      case 'dish':
+        return dish;
+      case 'quantity':
+        return quantity;
+      case 'shopId':
+        return shopId;
+      case 'selectedSize':
+      case 'size':
+        return selectedSize;
+      case 'modifiers':
+      case 'selectedModifiers':
+      case 'addons':
+      case 'selectedAddons':
+        return selectedModifiers;
+      default:
+        return null;
+    }
+  }
+
+  /// Вспомогательный геттер для расчета стоимости одной позиции с учетом модификаторов
+  double get itemTotalWithModifiers {
+    double basePrice = dish.price;
+    double modifiersSum = 0;
+
+    if (selectedModifiers != null) {
+      for (var mod in selectedModifiers!) {
+        if (mod is Map && mod['price'] != null) {
+          modifiersSum += double.tryParse(mod['price'].toString()) ?? 0.0;
+        } else {
+          try {
+            modifiersSum += double.tryParse((mod as dynamic).price.toString()) ?? 0.0;
+          } catch (_) {}
+        }
+      }
+    }
+    return (basePrice + modifiersSum) * quantity;
+  }
 }
 
 ValueNotifier<String?> currentActiveShopId = ValueNotifier<String?>(null);
@@ -33,21 +104,83 @@ String? getExistingShopId(String userId) {
   return null;
 }
 
-void addToCartItem(String userId, String shopId, Dish dish, {BuildContext? context}) {
+// 🔹 Абсолютно надежная функция сравнения товаров
+bool _areDishesEqual(CartItem itemA, CartItem itemB) {
+  // 1. Имя блюда должно совпадать строго
+  if (itemA.dish.name.trim() != itemB.dish.name.trim()) return false;
+
+  // 2. Сравнение размеров с нормализацией
+  final sizeA = (itemA.selectedSize ?? '').trim().toLowerCase();
+  final sizeB = (itemB.selectedSize ?? '').trim().toLowerCase();
+  if (sizeA != sizeB) return false;
+
+  // 3. Нормализация и сбор модификаторов в строковый массив для точного сравнения
+  List<String> extractMods(List<dynamic>? mods) {
+    if (mods == null || mods.isEmpty) return [];
+    final list = <String>[];
+    for (var m in mods) {
+      String name = '';
+      String price = '0';
+      if (m is Map) {
+        name = m['name']?.toString().trim().toLowerCase() ?? '';
+        price = m['price']?.toString().trim() ?? '0';
+      } else {
+        try {
+          name = (m as dynamic).name.toString().trim().toLowerCase();
+          price = (m as dynamic).price.toString().trim();
+        } catch (_) {
+          name = m.toString().trim().toLowerCase();
+        }
+      }
+      list.add('$name:$price');
+    }
+    list.sort();
+    return list;
+  }
+
+  final modsA = extractMods(itemA.selectedModifiers);
+  final modsB = extractMods(itemB.selectedModifiers);
+
+  if (modsA.length != modsB.length) return false;
+
+  for (int i = 0; i < modsA.length; i++) {
+    if (modsA[i] != modsB[i]) return false;
+  }
+
+  return true;
+}
+
+void addToCartItem(
+    String userId,
+    String shopId,
+    Dish dish, {
+      BuildContext? context,
+      String? selectedSize,
+      List<dynamic>? selectedModifiers,
+    }) {
   final existingShopId = getExistingShopId(userId);
 
   if (existingShopId != null && existingShopId != shopId) {
     if (context != null) {
-      _showClearCartDialog(context, userId, shopId, dish);
+      _showClearCartDialog(context, userId, shopId, dish, selectedSize: selectedSize, selectedModifiers: selectedModifiers);
     }
     return;
   }
 
   final cart = getCart(userId, shopId);
-  final index = cart.value.indexWhere((e) => e.dish.name == dish.name);
+
+  final newItem = CartItem(
+    dish: dish,
+    shopId: shopId,
+    selectedSize: selectedSize,
+    selectedModifiers: selectedModifiers,
+  );
+
+  // Ищем товар с учетом имени, размера и модификаторов
+  final index = cart.value.indexWhere((e) => _areDishesEqual(e, newItem));
 
   if (index == -1) {
-    cart.value.add(CartItem(dish: dish, shopId: shopId));
+    cart.value.add(newItem);
   } else {
     cart.value[index].quantity++;
   }
@@ -57,7 +190,14 @@ void addToCartItem(String userId, String shopId, Dish dish, {BuildContext? conte
   _syncCombinedCart(userId);
 }
 
-void _showClearCartDialog(BuildContext context, String userId, String newShopId, Dish dish) {
+void _showClearCartDialog(
+    BuildContext context,
+    String userId,
+    String newShopId,
+    Dish dish, {
+      String? selectedSize,
+      List<dynamic>? selectedModifiers,
+    }) {
   showDialog(
     context: context,
     builder: (context) => AlertDialog(
@@ -72,7 +212,7 @@ void _showClearCartDialog(BuildContext context, String userId, String newShopId,
           onPressed: () {
             clearCart(userId);
             Navigator.pop(context);
-            addToCartItem(userId, newShopId, dish);
+            addToCartItem(userId, newShopId, dish, selectedSize: selectedSize, selectedModifiers: selectedModifiers);
           },
           child: const Text("Очистить и добавить", style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold)),
         ),
@@ -83,7 +223,7 @@ void _showClearCartDialog(BuildContext context, String userId, String newShopId,
 
 void removeFromCart(String userId, String shopId, CartItem item) {
   final cart = getCart(userId, shopId);
-  final index = cart.value.indexWhere((e) => e.dish.name == item.dish.name);
+  final index = cart.value.indexWhere((e) => _areDishesEqual(e, item));
 
   if (index != -1) {
     if (cart.value[index].quantity > 1) {
@@ -96,13 +236,14 @@ void removeFromCart(String userId, String shopId, CartItem item) {
   }
 }
 
-void deleteFromCart(String userId, String shopId, String dishName) {
+void deleteFromCart(String userId, String shopId, CartItem item) {
   final cart = getCart(userId, shopId);
-  cart.value.removeWhere((item) => item.dish.name == dishName);
+  cart.value.removeWhere((e) => _areDishesEqual(e, item));
   cart.value = List.from(cart.value);
   _syncCombinedCart(userId);
 }
 
+/// Сумма корзины с учетом (база + модификаторы) * количество
 double getCartTotal(String userId, [String? shopId]) {
   if (shopId == null || shopId == "" || shopId == "null") {
     final userCarts = cartByUser[userId];
@@ -111,14 +252,14 @@ double getCartTotal(String userId, [String? shopId]) {
     userCarts.forEach((key, notifier) {
       if (key != null) {
         for (var item in notifier.value) {
-          total += item.dish.price * item.quantity;
+          total += item.itemTotalWithModifiers;
         }
       }
     });
     return total;
   }
   final cart = getCart(userId, shopId);
-  return cart.value.fold(0, (sum, item) => sum + (item.dish.price * item.quantity));
+  return cart.value.fold(0, (sum, item) => sum + item.itemTotalWithModifiers);
 }
 
 void clearCart(String userId, [String? shopId]) {
@@ -147,9 +288,11 @@ List<CartItem> _combineAllCarts(String userId) {
     if (entry.key == null) continue;
     for (var item in entry.value.value) {
       combined.add(CartItem(
-          dish: item.dish,
-          quantity: item.quantity,
-          shopId: item.shopId
+        dish: item.dish,
+        quantity: item.quantity,
+        shopId: item.shopId,
+        selectedSize: item.selectedSize,
+        selectedModifiers: item.selectedModifiers,
       ));
     }
   }

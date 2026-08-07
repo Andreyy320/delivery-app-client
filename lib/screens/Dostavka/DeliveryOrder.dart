@@ -6,38 +6,36 @@ class DeliveryOrder {
   final LatLng pickup;
   final LatLng dropoff;
 
-  // Текстовые адреса из мап pickup и dropoff
   final String? pickupAddress;
   final String? dropoffAddress;
-
-  // Данные клиента (кто создал заказ)
+  final String? subType;
+  final String? description;
   final String? clientName;
   final String? clientPhone;
   final String? clientId;
-
-  // Данные получателя (если заказ получает другой человек)
   final String? recipientName;
   final String? recipientPhone;
-
-  // Комментарий к заказу
   final String? comment;
 
   final List<String> options;
   final double totalCost;
   final double? itemsPrice;
   final double? deliveryPrice;
+
   final double? distanceKm;
   final int? durationMin;
+
+  double? get distance_km => distanceKm;
+  int? get duration_min => durationMin;
+
   final String status;
   final DateTime createdAt;
   final String type;
 
-  // Поля для прогресс-бара
   final DateTime? acceptedAt;
   final DateTime? inProgressAt;
   final DateTime? deliveredAt;
 
-  // Остальное
   final String? bodyType;
   final int? loaders;
   final int? escort;
@@ -52,6 +50,8 @@ class DeliveryOrder {
     required this.dropoff,
     this.pickupAddress,
     this.dropoffAddress,
+    this.subType,
+    this.description,
     this.clientName,
     this.clientPhone,
     this.clientId,
@@ -94,42 +94,32 @@ class DeliveryOrder {
         (dropoffMap['lon'] ?? dropoffMap['lng'] ?? map['clientLng'] ?? 0).toDouble(),
       ),
 
-      // Корректно достаем адреса из карт
-      pickupAddress: pickupMap['address'] ?? map['restaurantAddress'],
-      dropoffAddress: dropoffMap['address'] ?? map['clientAddress'] ?? map['address'],
+      // 🛠 Исправлено: теперь сначала ищем прямо в корне (`map['pickupAddress']`), как у тебя в базе
+      pickupAddress: map['pickupAddress'] ?? pickupMap['address'] ?? map['restaurantAddress'],
+      dropoffAddress: map['dropoffAddress'] ?? dropoffMap['address'] ?? map['clientAddress'] ?? map['address'],
 
-      // Данные клиента, телефона и ID
+      subType: map['subType'],
+      description: map['description'] ?? map['comment'] ?? map['de'],
       clientName: map['clientName'] ?? map['name'],
       clientPhone: map['clientPhone'] ?? map['phone'],
       clientId: map['clientId'] ?? map['userId'],
-
-      // Данные получателя (поддержка receiverName и recipientName)
       recipientName: map['receiverName'] ?? map['recipientName'] ?? map['recipient_name'],
       recipientPhone: map['receiverPhone'] ?? map['recipientPhone'] ?? map['recipient_phone'],
-
-      // Комментарий к заказу (поддержка comment, description и старого de)
-      comment: map['comment'] ?? map['description'] ?? map['de'],
-
+      comment: map['comment'] ?? map['de'],
       options: List<String>.from(map['options'] ?? []),
       totalCost: (map['total_cost'] ?? map['totalCost'] ?? map['total'] ?? map['totalPrice'] ?? 0).toDouble(),
       itemsPrice: (map['itemsPrice'] ?? map['items_price'])?.toDouble(),
       deliveryPrice: (map['deliveryPrice'] ?? map['delivery_price'])?.toDouble(),
-
       distanceKm: (map['distance_km'] ?? map['distanceKm'])?.toDouble(),
       durationMin: (map['duration_min'] ?? map['durationMin'])?.toInt(),
       status: map['status'] ?? 'new',
-
-      // Обработка даты создания
       createdAt: (map['created_at'] as Timestamp?)?.toDate() ??
           (map['createdAt'] as Timestamp?)?.toDate() ??
           DateTime.now(),
-
       type: map['type'] ?? 'delivery',
-
       acceptedAt: (map['acceptedAt'] as Timestamp?)?.toDate(),
       inProgressAt: (map['inProgressAt'] as Timestamp?)?.toDate(),
       deliveredAt: (map['deliveredAt'] as Timestamp?)?.toDate(),
-
       bodyType: map['bodyType'],
       loaders: map['loaders'],
       escort: map['escort'],

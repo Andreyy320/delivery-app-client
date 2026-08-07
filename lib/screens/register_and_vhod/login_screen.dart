@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'user_storage.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../../models/auth_state.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -15,26 +16,67 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
 
-  // Логика входа с проверкой на 8 цифр
+  // Единая дизайн-система приложения
+  static const Color _bgMain = Color(0xFFF4F5F7);
+  static const Color _cardSurface = Colors.white;
+  static const Color _textMain = Color(0xFF0F172A);
+  static const Color _textMuted = Color(0xFF64748B);
+  static const Color _borderSubtle = Color(0xFFE2E8F0);
+  static const Color _accentYellow = Color(0xFFFCEE36);
+
+  // Логика входа через твой сервер Node.js (PostgreSQL)
   void _login() async {
-    // Если введено меньше или больше 8 цифр — выдаем ошибку
     if (_phoneController.text.length != 8) {
       _error('Номер телефона должен содержать ровно 8 цифр');
       return;
     }
 
     String phone = '+373${_phoneController.text.trim()}';
+    String password = _passwordController.text.trim();
+
+    final requestBody = {
+      'phone': phone,
+      'password': password,
+    };
+
+    print('=== [LOGIN] Отправка запроса ===');
+    print('URL: http://10.0.2.2:3000/api/login');
+    print('Body: ${jsonEncode(requestBody)}');
 
     try {
-      await UserStorage.login(
-        phone: phone,
-        password: _passwordController.text.trim(),
+      const String url = 'http://10.0.2.2:3000/api/login';
+
+      final response = await http.post(
+        Uri.parse(url,
+        ),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(requestBody),
       );
 
-      authState.login(); // уведомляем приложение
-      if (mounted) Navigator.pop(context);
+      print('=== [LOGIN] Ответ от сервера ===');
+      print('StatusCode: ${response.statusCode}');
+      print('ResponseBody: ${response.body}');
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        authState.login(); // уведомляем приложение об успешном входе
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: Color(0xFF10B981),
+              content: Text('Вход выполнен успешно 🎉', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          );
+          Navigator.pop(context);
+        }
+      } else {
+        _error(data['error'] ?? 'Неверный номер или пароль');
+      }
     } catch (e) {
-      _error('Неверный номер или пароль');
+      print('=== [LOGIN] Ошибка сети ===');
+      print('$e');
+      _error('Нет связи с сервером. Проверьте node index.js');
     }
   }
 
@@ -42,9 +84,9 @@ class _LoginScreenState extends State<LoginScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(text, style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.redAccent,
+        backgroundColor: const Color(0xFFEF4444),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -52,123 +94,180 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: _bgMain,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: _bgMain,
         elevation: 0,
         centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 20),
-          onPressed: () => Navigator.pop(context),
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: _cardSurface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: _borderSubtle, width: 1),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _textMain, size: 16),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
         ),
         title: const Text(
           'Авторизация',
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 18),
+          style: TextStyle(
+            color: _textMain,
+            fontWeight: FontWeight.w900,
+            fontSize: 18,
+            letterSpacing: -0.4,
+          ),
         ),
       ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      body: SafeArea(
+        child: Stack(
           children: [
-            const SizedBox(height: 40),
-
-            const SizedBox(
-              width: double.infinity,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'С возвращением! ',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.5,
-                  ),
+            // Декоративные фоновые элементы в стиле приложения
+            Positioned(
+              top: -60,
+              right: -40,
+              child: Container(
+                width: 200,
+                height: 200,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _accentYellow.withValues(alpha: 0.15),
                 ),
               ),
             ),
+            SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 30),
 
-            const SizedBox(height: 12),
-            Text(
-              'Введите данные, чтобы продолжить работу с заказами',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 16,
-                height: 1.4,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 48),
-
-            // ТЕЛЕФОН (Теперь строго 8 цифр)
-            _buildField(
-              controller: _phoneController,
-              label: 'Номер телефона',
-              icon: Icons.phone_android_rounded,
-              prefixText: '+373 ',
-              keyboardType: TextInputType.number,
-              formatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(8), // ОГРАНИЧЕНИЕ 8 ЦИФР
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // ПАРОЛЬ
-            _buildField(
-              controller: _passwordController,
-              label: 'Пароль',
-              icon: Icons.lock_open_rounded,
-              isPassword: _obscurePassword,
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscurePassword ? Icons.visibility_off_rounded : Icons.visibility_rounded,
-                  color: Colors.grey[400],
-                  size: 20,
-                ),
-                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-              ),
-            ),
-
-            const SizedBox(height: 48),
-
-            // КНОПКА ВОЙТИ
-            Container(
-              width: double.infinity,
-              height: 64,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.deepOrange.withOpacity(0.3),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
+                  const SizedBox(
+                    width: double.infinity,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'С возвращением!',
+                        style: TextStyle(
+                          color: _textMain,
+                          fontSize: 32,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.8,
+                        ),
+                      ),
+                    ),
                   ),
+
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Введите данные, чтобы продолжить работу с заказами',
+                    style: TextStyle(
+                      color: _textMuted,
+                      fontSize: 14,
+                      height: 1.4,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 36),
+
+                  // ФОРМА В ОБЩЕМ БЕЛОМ КОНТЕЙНЕРЕ КАРТОЧКИ
+                  Container(
+                    padding: const EdgeInsets.all(22),
+                    decoration: BoxDecoration(
+                      color: _cardSurface,
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(color: _borderSubtle, width: 1),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _textMain.withValues(alpha: 0.03),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        // ТЕЛЕФОН (Строго 8 цифр)
+                        _buildField(
+                          controller: _phoneController,
+                          label: 'Номер телефона',
+                          icon: Icons.phone_android_rounded,
+                          prefixText: '+373 ',
+                          keyboardType: TextInputType.number,
+                          formatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(8),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+
+                        // ПАРОЛЬ
+                        _buildField(
+                          controller: _passwordController,
+                          label: 'Пароль',
+                          icon: Icons.lock_outline_rounded,
+                          isPassword: _obscurePassword,
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                              color: _textMuted,
+                              size: 20,
+                            ),
+                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // КНОПКА ВОЙТИ В СТИЛЕ ПРИЛОЖЕНИЯ
+                  Container(
+                    width: double.infinity,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      color: _textMain,
+                      boxShadow: [
+                        BoxShadow(
+                          color: _textMain.withValues(alpha: 0.12),
+                          blurRadius: 15,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: ElevatedButton(
+                      onPressed: _login,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                      child: const Text(
+                        'ВОЙТИ В АККАУНТ',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
                 ],
               ),
-              child: ElevatedButton(
-                onPressed: _login,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepOrange,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-                child: const Text(
-                  'ВОЙТИ В АККАУНТ',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ),
             ),
-            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -192,41 +291,49 @@ class _LoginScreenState extends State<LoginScreen> {
           padding: const EdgeInsets.only(left: 4, bottom: 8),
           child: Text(
             label,
-            style: TextStyle(
-              fontSize: 13,
+            style: const TextStyle(
+              fontSize: 12,
               fontWeight: FontWeight.w800,
-              color: Colors.grey[500],
+              color: _textMuted,
               letterSpacing: 0.5,
             ),
           ),
         ),
         Container(
           decoration: BoxDecoration(
-            color: Colors.grey[50],
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.grey[200]!),
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: _borderSubtle, width: 1),
           ),
           child: TextField(
             controller: controller,
             obscureText: isPassword,
             keyboardType: keyboardType,
             inputFormatters: formatters,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+              color: _textMain,
+            ),
             decoration: InputDecoration(
-              prefixIcon: Icon(icon, color: Colors.deepOrange, size: 22),
-              prefixIconConstraints: const BoxConstraints(minWidth: 50),
+              prefixIcon: Icon(icon, color: _textMain, size: 20),
+              prefixIconConstraints: const BoxConstraints(minWidth: 48),
               prefixText: prefixText,
               prefixStyle: const TextStyle(
-                color: Colors.black,
-                fontWeight: FontWeight.w900,
-                fontSize: 16,
+                color: _textMain,
+                fontWeight: FontWeight.w800,
+                fontSize: 15,
               ),
               suffixIcon: suffixIcon,
               hintText: isPassword ? '••••••••' : '77x xxxxx',
-              hintStyle: TextStyle(color: Colors.grey[300], fontSize: 15),
+              hintStyle: const TextStyle(
+                color: Color(0xFFCBD5E1),
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(
-                vertical: 20,
+                vertical: 16,
                 horizontal: 16,
               ),
             ),

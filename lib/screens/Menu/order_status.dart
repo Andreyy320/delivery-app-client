@@ -221,28 +221,41 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
 
   Widget buildFoodOrderCard(Order order) {
     bool isCancelled = order.status == 'cancelled';
-    String title = 'Заказ из ресторана';
+
+    // Безопасная проверка для nullable String
+    String title = (order.restaurantName != null && order.restaurantName!.isNotEmpty)
+        ? order.restaurantName!
+        : 'Заказ из ресторана';
+
     String prepLabel = 'Готовим';
     IconData prepIcon = Icons.restaurant_rounded;
     Color themeColor = const Color(0xFFF97316);
 
     if (order.type == 'apteka') {
-      title = 'Заказ из аптеки';
+      if (order.restaurantName == null || order.restaurantName!.isEmpty) {
+        title = 'Заказ из аптеки';
+      }
       prepLabel = 'Собираем';
       prepIcon = Icons.medical_services_rounded;
       themeColor = const Color(0xFF0D9488);
     } else if (order.type == 'electronika') {
-      title = 'Заказ электроники';
+      if (order.restaurantName == null || order.restaurantName!.isEmpty) {
+        title = 'Заказ электроники';
+      }
       prepLabel = 'Собираем';
       prepIcon = Icons.devices_rounded;
       themeColor = const Color(0xFF6366F1);
     } else if (order.type == 'product') {
-      title = 'Заказ продуктов';
+      if (order.restaurantName == null || order.restaurantName!.isEmpty) {
+        title = 'Заказ продуктов';
+      }
       prepLabel = 'Собираем';
       prepIcon = Icons.shopping_basket_rounded;
       themeColor = const Color(0xFF16A34A);
     } else if (order.type == 'svetok') {
-      title = 'Заказ цветов';
+      if (order.restaurantName == null || order.restaurantName!.isEmpty) {
+        title = 'Заказ цветов';
+      }
       prepLabel = 'Собираем';
       prepIcon = Icons.local_florist_rounded;
       themeColor = const Color(0xFFEC4899);
@@ -273,39 +286,198 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ...order.items.map((item) => Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Row(
+          ...order.items.asMap().entries.map((entry) {
+            final int index = entry.key;
+            final item = entry.value;
+
+            final name = item.dish.name;
+            final image = item.dish.imagePath;
+            final price = (item.dish.price ?? 0.0).toDouble();
+            final quantity = (item.quantity ?? 1).toInt();
+            final size = item.selectedSize;
+            final weight = item.dish.weight;
+
+            final dynamic rawModifiers = (item as dynamic).modifiers ?? (item.dish as dynamic).modifiers;
+            final List<dynamic>? modifiers = rawModifiers is List ? rawModifiers : null;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: themeColor,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: themeColor.withOpacity(0.4),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+                if (index > 0)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 10),
+                    child: Divider(height: 1, color: Color(0xFFF1F5F9)),
                   ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: (image.isNotEmpty)
+                          ? (image.startsWith('http')
+                          ? Image.network(
+                        image,
+                        width: 48,
+                        height: 48,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _imageErrorPlaceholder(themeColor),
+                      )
+                          : Image.asset(
+                        image,
+                        width: 48,
+                        height: 48,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _imageErrorPlaceholder(themeColor),
+                      ))
+                          : _imageErrorPlaceholder(themeColor),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                              color: Color(0xFF0F172A),
+                              height: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Text(
+                                '${price.toInt()} Руб',
+                                style: const TextStyle(
+                                  color: Color(0xFF334155),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              if ((size != null && size.isNotEmpty) || (weight.isNotEmpty && weight != '0')) ...[
+                                const Text('  •  ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+                                Text(
+                                  [
+                                    if (size != null && size.isNotEmpty) size,
+                                    if (weight.isNotEmpty && weight != '0') weight
+                                  ].join(' • '),
+                                  style: TextStyle(
+                                    color: themeColor,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '$quantity шт',
+                        style: const TextStyle(
+                          color: Color(0xFF475569),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    '${item.dish.name} × ${item.quantity}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF334155),
+
+                if (modifiers != null && modifiers.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Дополнительно',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF94A3B8),
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        ...modifiers.map((mod) {
+                          String modName = '';
+                          double modPrice = 0.0;
+
+                          if (mod is Map) {
+                            modName = mod['name']?.toString() ?? '';
+                            modPrice = double.tryParse(mod['price']?.toString() ?? '0') ?? 0.0;
+                          } else {
+                            try {
+                              modName = (mod as dynamic).name.toString();
+                              modPrice = double.tryParse((mod as dynamic).price.toString()) ?? 0.0;
+                            } catch (_) {
+                              modName = mod.toString();
+                            }
+                          }
+
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.add_rounded, size: 12, color: themeColor),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          modName,
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: Color(0xFF475569),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (modPrice > 0)
+                                  Text(
+                                    '+${modPrice.toInt()} Руб',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: themeColor,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
                     ),
                   ),
-                ),
+                ],
               ],
-            ),
-          )),
+            );
+          }),
           const SizedBox(height: 8),
           const Divider(height: 16, color: Color(0xFFF1F5F9)),
           isCancelled ? _buildCancelledWidget() : _buildProgressBar(steps, icons, labels, themeColor),
@@ -333,6 +505,18 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _imageErrorPlaceholder(Color color) {
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(Icons.fastfood_rounded, size: 22, color: color),
     );
   }
 
