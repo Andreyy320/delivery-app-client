@@ -1,0 +1,74 @@
+name: Build App
+
+on: [push, workflow_dispatch]
+
+jobs:
+  build_android:
+    runs-on: ubuntu-latest
+    
+    # Добавляем переменные окружения, чтобы Gradle успешно создал ключи подписи во временной папке
+    env:
+      HOME: /tmp
+      ANDROID_USER_HOME: /tmp/.android
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Install Android NDK and CMake
+        run: |
+          echo "y" | sudo ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.0.12077973" "cmake;3.22.1"
+
+      - name: Build APK (Release)
+        run: |
+          flutter pub get
+          flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: delivery_app_android
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+  build_ios:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install Flutter dependencies
+        run: |
+          flutter pub get
+          flutter precache --ios
+
+      - name: Clean iOS
+        run: |
+          rm -rf ios/Pods ios/Podfile.lock
+          rm -rf ~/Library/Developer/Xcode/DerivedData
+
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install --repo-update
+          cd ..
+
+      - name: Build iOS (no codesign)
+        run: |
+          flutter build ios --release --no-codesign
+          # Создаем структуру Payload для IPA
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          # Запаковываем в IPA
+          zip -r delivery_app.ipa Payload
+
+      - name: Upload iOS Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: delivery_app_ios
+          path: delivery_app.ipa
