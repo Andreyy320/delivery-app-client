@@ -1,10 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:untitled1/screens/register_and_vhod/notification_service.dart';
 import 'package:untitled1/shops/offline_screen.dart';
-import 'firebase_options.dart';
 import 'screens/main_screen.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:ui'; // Требуется для доступа к PlatformDispatcher
@@ -13,20 +10,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
 
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-
-    FirebaseMessaging messaging = FirebaseMessaging.instance;
-    await messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-  } catch (e) {
-    debugPrint('FIREBASE INIT ERROR: $e');
-  }
+  // Инициализация Firebase полностью удалена, так как переходим на собственный Node.js / PostgreSQL бэкенд
 
   runApp(const MyApp());
 }
@@ -80,7 +64,6 @@ class MyApp extends StatelessWidget {
     // Получаем реальную физическую плотность экрана устройства напрямую из системы,
     // игнорируя изменения ползунка Display Size в настройках ОС.
     final view = PlatformDispatcher.instance.views.first;
-    final double nativePixelRatio = view.physicalSize.width / view.devicePixelRatio;
 
     // Безопасная фиксация: вычисляем стабильный коэффициент для экрана
     const double designWidth = 410.0;

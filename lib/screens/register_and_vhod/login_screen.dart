@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../../NEW_MODELS/User_Storage.dart';
 import '../../models/auth_state.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -24,7 +24,7 @@ class _LoginScreenState extends State<LoginScreen> {
   static const Color _borderSubtle = Color(0xFFE2E8F0);
   static const Color _accentYellow = Color(0xFFFCEE36);
 
-  // Логика входа через твой сервер Node.js (PostgreSQL)
+  // Логика входа через UserStorage (сохраняет токен и данные юзера)
   void _login() async {
     if (_phoneController.text.length != 8) {
       _error('Номер телефона должен содержать ровно 8 цифр');
@@ -34,49 +34,31 @@ class _LoginScreenState extends State<LoginScreen> {
     String phone = '+373${_phoneController.text.trim()}';
     String password = _passwordController.text.trim();
 
-    final requestBody = {
-      'phone': phone,
-      'password': password,
-    };
-
-    print('=== [LOGIN] Отправка запроса ===');
-    print('URL: http://10.0.2.2:3000/api/login');
-    print('Body: ${jsonEncode(requestBody)}');
-
     try {
-      const String url = 'http://10.0.2.2:3000/api/login';
-
-      final response = await http.post(
-        Uri.parse(url,
-        ),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(requestBody),
+      // Вызываем метод входа из UserStorage, который сохранит user_data и token
+      await UserStorage.login(
+        phone: phone,
+        password: password,
       );
 
-      print('=== [LOGIN] Ответ от сервера ===');
-      print('StatusCode: ${response.statusCode}');
-      print('ResponseBody: ${response.body}');
+      authState.login(); // уведомляем приложение об успешном входе
 
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data['success'] == true) {
-        authState.login(); // уведомляем приложение об успешном входе
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              backgroundColor: Color(0xFF10B981),
-              content: Text('Вход выполнен успешно 🎉', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          );
-          Navigator.pop(context);
-        }
-      } else {
-        _error(data['error'] ?? 'Неверный номер или пароль');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Color(0xFF10B981),
+            content: Text('Вход выполнен успешно 🎉', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        );
+        Navigator.pop(context);
       }
     } catch (e) {
-      print('=== [LOGIN] Ошибка сети ===');
-      print('$e');
-      _error('Нет связи с сервером. Проверьте node index.js');
+      // Если сервер вернул ошибку или нет связи
+      String errorMessage = e.toString().replaceAll('Exception: ', '');
+      if (errorMessage.contains('Connection refused') || errorMessage.contains('Failed host lookup')) {
+        errorMessage = 'Нет связи с сервером. Проверьте node index.js';
+      }
+      _error(errorMessage);
     }
   }
 

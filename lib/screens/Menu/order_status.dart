@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
+import '../../NEW_MODELS/User_Storage.dart';
 import '../../models/order_model.dart';
 import '../Dostavka/DeliveryOrder.dart';
-import '../../NO_USED_SCREEN/gorod_model.dart';
-import '../../NO_USED_SCREEN/mejgorod_model.dart';
 import 'package:intl/intl.dart';
 
 class OrdersStatusScreen extends StatefulWidget {
@@ -15,52 +12,58 @@ class OrdersStatusScreen extends StatefulWidget {
 }
 
 class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
-  late final User? user;
-
-  Stream<List<Order>>? ordersStream;
-  Stream<List<DeliveryOrder>>? deliveryStream;
-  Stream<List<CityDeliveryOrder>>? cityDeliveryStream;
-  Stream<List<MejCityDeliveryOrder>>? mejCityDeliveryStream;
+  bool _isLoading = true;
+  List<Order> _foodOrders = [];
+  List<DeliveryOrder> _deliveryOrders = [];
 
   @override
   void initState() {
     super.initState();
-    user = FirebaseAuth.instance.currentUser;
+    _loadOrders();
+  }
 
-    if (user != null) {
-      ordersStream = FirebaseFirestore.instance
-          .collection('users')
-          .doc(user!.uid)
-          .collection('orders')
-          .orderBy('createdAt', descending: true)
-          .snapshots()
-          .map((snapshot) => snapshot.docs.map((doc) => Order.fromFirestore(doc.id, doc.data())).toList());
+  // Метод загрузки заказов из вашего PostgreSQL / API через UserStorage
+  Future<void> _loadOrders() async {
+    setState(() {
+      _isLoading = true;
+    });
 
-      deliveryStream = FirebaseFirestore.instance
-          .collection('users')
-          .doc(user!.uid)
-          .collection('delivery_orders')
-          .orderBy('createdAt', descending: true)
-          .snapshots()
-          .map((snapshot) => snapshot.docs.map((doc) => DeliveryOrder.fromFirestore(doc.id, doc.data())).toList());
+    try {
+      // Загружаем данные параллельно для ускорения
+      final results = await Future.wait([
+        UserStorage.getOrders(),         // Ваши обычные заказы (еда и т.д.)
+        UserStorage.getIndividualOrders(), // <--- ДОБАВЬТЕ ЭТОТ ВЫЗОВ
+      ]);
 
-      cityDeliveryStream = FirebaseFirestore.instance
-          .collection('users')
-          .doc(user!.uid)
-          .collection('cityOrders')
-          .orderBy('createdAt', descending: true)
-          .snapshots()
-          .map((snapshot) => snapshot.docs.map((doc) => CityDeliveryOrder.fromFirestore(doc.id, doc.data())).toList());
-
-      mejCityDeliveryStream = FirebaseFirestore.instance
-          .collection('users')
-          .doc(user!.uid)
-          .collection('mejCityOrders')
-          .orderBy('createdAt', descending: true)
-          .snapshots()
-          .map((snapshot) => snapshot.docs.map((doc) => MejCityDeliveryOrder.fromFirestore(doc.id, doc.data())).toList());
+      setState(() {
+        _foodOrders = results[0] as List<Order>;
+        _deliveryOrders = results[1] as List<DeliveryOrder>; // <--- СОХРАНЯЕМ
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Ошибка загрузки заказов: $e');
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
+
+  // Универсальный метод удаления заказа через UserStorage
+  Future<void> _deleteOrder(String collection, dynamic id) async {
+    try {
+      final int orderId = id is String ? int.parse(id) : (id as int);
+
+      // collection передается как 'orders' или 'delivery_orders'
+      // Метод UserStorage сам сопоставит его с правильным эндпоинтом бэкенда
+      await UserStorage.deleteOrderById(collection, orderId);
+
+      // Перезагружаем список после удаления
+      _loadOrders();
+    } catch (e) {
+      print('Ошибка при удалении заказа: $e');
+    }
+  }
+
 
   String _translateStatus(String status) {
     switch (status.toLowerCase()) {
@@ -282,7 +285,11 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
       date: order.dateTime,
       status: isCancelled ? 'Отменен' : (order.deliveredAt != null ? 'Доставлен' : 'Активен'),
       color: isCancelled ? const Color(0xFFEF4444) : themeColor,
-      onDelete: isCancelled || order.deliveredAt != null ? () => _deleteOrder('orders', order.id) : null,
+      // Если order.id имеет тип String, а в _deleteOrder нужен int, то пишем int.parse(order.id)
+      // Если order.id уже int, то просто order.id
+      onDelete: isCancelled || order.deliveredAt != null
+          ? () => _deleteOrder('orders', order.id is String ? int.parse(order.id) : order.id)
+          : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -507,7 +514,6 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
       ),
     );
   }
-
   Widget _imageErrorPlaceholder(Color color) {
     return Container(
       width: 48,
@@ -534,12 +540,15 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
     final pickupText = order.pickupAddress ?? 'Адрес отправления не указан';
     final dropoffText = order.dropoffAddress ?? 'Адрес назначения не указан';
 
+    // Безопасное приведение order.id к int для бэкенда PostgreSQL
+    final int orderId = order.id is String ? int.parse(order.id) : (order.id as int);
+
     return _baseCard(
       title: 'Индивидуальная доставка',
       date: order.createdAt,
       status: isCancelled ? 'Отменен' : _translateStatus(order.status),
       color: isCancelled ? const Color(0xFFEF4444) : const Color(0xFF2563EB),
-      onDelete: (order.deliveredAt != null || isCancelled) ? () => _deleteOrder('delivery_orders', order.id) : null,
+      onDelete: (order.deliveredAt != null || isCancelled) ? () => _deleteOrder('delivery_orders', orderId) : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -574,6 +583,7 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
       ),
     );
   }
+
 
   Widget buildCargoCard(String type, dynamic order, Color color, String collection) {
     bool isCancelled = order.status == 'cancelled';
@@ -832,172 +842,153 @@ class _OrdersStatusScreenState extends State<OrdersStatusScreen> {
     );
   }
 
-  Future<void> _deleteOrder(String collection, String id) async {
-    await FirebaseFirestore.instance.collection('users').doc(user!.uid).collection(collection).doc(id).delete();
-  }
 
-  @override
-  Widget build(BuildContext context) {
-    if (user == null) {
-      return Scaffold(
-        backgroundColor: const Color(0xFFEEF2F6),
-        appBar: AppBar(
-          title: const Text(
-            'Статус заказов',
-            style: TextStyle(
-              color: Color(0xFF0F172A),
-              fontWeight: FontWeight.w900,
-              fontSize: 18,
-            ),
-          ),
-          centerTitle: true,
-          backgroundColor: const Color(0xFFEEF2F6),
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
-            onPressed: () => Navigator.maybePop(context),
-          ),
-        ),
-        body: const Center(
-          child: Text(
-            'Авторизуйтесь для просмотра',
-            style: TextStyle(
-              color: Color(0xFF64748B),
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      );
-    }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFEEF2F6),
-      appBar: AppBar(
-        title: const Text(
-          'Статус заказов',
-          style: TextStyle(
-            color: Color(0xFF0F172A),
-            fontWeight: FontWeight.w900,
-            fontSize: 18,
-            letterSpacing: -0.5,
-          ),
-        ),
-        centerTitle: true,
-        backgroundColor: const Color(0xFFEEF2F6),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
-          onPressed: () => Navigator.maybePop(context),
-        ),
-      ),
-      body: StreamBuilder<List<Order>>(
-        stream: ordersStream,
-        builder: (context, snapshot) {
-          return StreamBuilder<List<DeliveryOrder>>(
-            stream: deliveryStream,
-            builder: (context, snapshotDel) {
-              return StreamBuilder<List<CityDeliveryOrder>>(
-                stream: cityDeliveryStream,
-                builder: (context, snapshotCity) {
-                  return StreamBuilder<List<MejCityDeliveryOrder>>(
-                    stream: mejCityDeliveryStream,
-                    builder: (context, snapshotMej) {
-                      final combined = [
-                        ...(snapshot.data ?? []).map((o) => {'type': 'food', 'order': o}),
-                        ...(snapshotDel.data ?? []).map((d) => {'type': 'delivery', 'order': d}),
-                        ...(snapshotCity.data ?? []).map((c) => {'type': 'city', 'order': c}),
-                        ...(snapshotMej.data ?? []).map((m) => {'type': 'mej', 'order': m}),
-                      ];
-
-                      combined.sort((a, b) => _getOrderDate(b).compareTo(_getOrderDate(a)));
-
-                      if (combined.isEmpty) {
-                        return Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(28),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF8FAFC),
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFF0F172A).withOpacity(0.08),
-                                      blurRadius: 24,
-                                      offset: const Offset(0, 10),
-                                    ),
-                                    BoxShadow(
-                                      color: Colors.white.withOpacity(0.9),
-                                      blurRadius: 10,
-                                      offset: const Offset(-5, -5),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  Icons.receipt_long_outlined,
-                                  size: 52,
-                                  color: Color(0xFF94A3B8),
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-                              const Text(
-                                'Активных заказов нет',
-                                style: TextStyle(
-                                  color: Color(0xFF0F172A),
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              const Text(
-                                'Ваши оформленные заказы будут отображаться здесь',
-                                style: TextStyle(
-                                  color: Color(0xFF94A3B8),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-
-                      return ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        physics: const BouncingScrollPhysics(),
-                        itemCount: combined.length,
-                        itemBuilder: (context, index) {
-                          final item = combined[index];
-                          final type = item['type'];
-                          final order = item['order'];
-
-                          if (type == 'food') return buildFoodOrderCard(order as Order);
-                          if (type == 'delivery') return buildDeliveryOrderCard(order as DeliveryOrder);
-                          if (type == 'city') {
-                            return buildCargoCard('Городская доставка', order, const Color(0xFF16A34A), 'cityOrders');
-                          }
-                          return buildCargoCard('Межгород доставка', order, const Color(0xFF475569), 'mejCityOrders');
-                        },
-                      );
-                    },
-                  );
-                },
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-
-  DateTime _getOrderDate(Map<String, dynamic> item) {
-    final type = item['type'];
-    final o = item['order'];
-    if (type == 'food') return (o as Order).dateTime;
-    if (type == 'delivery') return (o as DeliveryOrder).createdAt;
-    if (type == 'city') return (o as CityDeliveryOrder).createdAt;
-    return (o as MejCityDeliveryOrder).createdAt;
-  }
+DateTime _getOrderDate(Map<String, dynamic> item) {
+final type = item['type'];
+final o = item['order'];
+if (type == 'food') return (o as Order).dateTime;
+return (o as DeliveryOrder).createdAt;
 }
+
+@override
+Widget build(BuildContext context) {
+// ЗАМЕНИТЕ эту проверку на вашу логику сессии/токена (например, _isLoggedIn == false)
+// Если у вас есть глобальная переменная или метод, проверьте его здесь:
+bool isNotLoggedIn = false; // Пример: замените на вашу проверку, например: ApiService.token == null
+
+if (isNotLoggedIn) {
+return Scaffold(
+backgroundColor: const Color(0xFFEEF2F6),
+appBar: AppBar(
+title: const Text(
+'Статус заказов',
+style: TextStyle(
+color: Color(0xFF0F172A),
+fontWeight: FontWeight.w900,
+fontSize: 18,
+),
+),
+centerTitle: true,
+backgroundColor: const Color(0xFFEEF2F6),
+elevation: 0,
+leading: IconButton(
+icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
+onPressed: () => Navigator.maybePop(context),
+),
+),
+body: const Center(
+child: Text(
+'Авторизуйтесь для просмотра',
+style: TextStyle(
+color: Color(0xFF64748B),
+fontSize: 15,
+fontWeight: FontWeight.w600,
+),
+),
+),
+);
+}
+
+return Scaffold(
+backgroundColor: const Color(0xFFEEF2F6),
+appBar: AppBar(
+title: const Text(
+'Статус заказов',
+style: TextStyle(
+color: Color(0xFF0F172A),
+fontWeight: FontWeight.w900,
+fontSize: 18,
+letterSpacing: -0.5,
+),
+),
+centerTitle: true,
+backgroundColor: const Color(0xFFEEF2F6),
+elevation: 0,
+leading: IconButton(
+icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
+onPressed: () => Navigator.maybePop(context),
+),
+),
+body: _isLoading
+? const Center(
+child: CircularProgressIndicator(
+color: Color(0xFF2563EB),
+),
+)
+: (() {
+final combined = [
+..._foodOrders.map((o) => {'type': 'food', 'order': o}),
+..._deliveryOrders.map((d) => {'type': 'delivery', 'order': d}),
+];
+
+combined.sort((a, b) => _getOrderDate(b).compareTo(_getOrderDate(a)));
+
+if (combined.isEmpty) {
+return Center(
+child: Column(
+mainAxisAlignment: MainAxisAlignment.center,
+children: [
+Container(
+padding: const EdgeInsets.all(28),
+decoration: BoxDecoration(
+color: const Color(0xFFF8FAFC),
+shape: BoxShape.circle,
+boxShadow: [
+BoxShadow(
+color: const Color(0xFF0F172A).withOpacity(0.08),
+blurRadius: 24,
+offset: const Offset(0, 10),
+),
+BoxShadow(
+color: Colors.white.withOpacity(0.9),
+blurRadius: 10,
+offset: const Offset(-5, -5),
+),
+],
+),
+child: const Icon(
+Icons.receipt_long_outlined,
+size: 52,
+color: Color(0xFF94A3B8),
+),
+),
+const SizedBox(height: 24),
+const Text(
+'Активных заказов нет',
+style: TextStyle(
+color: Color(0xFF0F172A),
+fontSize: 18,
+fontWeight: FontWeight.w800,
+),
+),
+const SizedBox(height: 6),
+const Text(
+'Ваши оформленные заказы будут отображаться здесь',
+style: TextStyle(
+color: Color(0xFF94A3B8),
+fontSize: 13,
+fontWeight: FontWeight.w500,
+),
+),
+],
+),
+);
+}
+
+return ListView.builder(
+padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+physics: const BouncingScrollPhysics(),
+itemCount: combined.length,
+itemBuilder: (context, index) {
+final item = combined[index];
+final type = item['type'];
+final order = item['order'];
+
+if (type == 'food') return buildFoodOrderCard(order as Order);
+return buildDeliveryOrderCard(order as DeliveryOrder);
+},
+);
+})(),
+);
+}}

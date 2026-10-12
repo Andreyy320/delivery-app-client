@@ -3,39 +3,12 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:flutter_map/flutter_map.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:async';
-
 import '../../Api_Servicess.dart';
+import '../../NEW_MODELS/User_Storage.dart';
 import '../../models/Search_adress_individ.dart';
 
-import 'dart:convert';
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
-import 'package:latlong2/latlong.dart' hide Path;
-import 'package:flutter_map/flutter_map.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:geolocator/geolocator.dart';
-import 'dart:async';
-
-import '../../Api_Servicess.dart';
-import '../../models/Search_adress_individ.dart';
-
-import 'dart:convert';
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
-import 'package:latlong2/latlong.dart' hide Path;
-import 'package:flutter_map/flutter_map.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:geolocator/geolocator.dart';
-import 'dart:async';
-
-import '../../Api_Servicess.dart';
-import '../../models/Search_adress_individ.dart';
 
 class ExpressDeliveryScreen extends StatefulWidget {
   const ExpressDeliveryScreen({super.key});
@@ -313,11 +286,24 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
       return;
     }
 
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
+    // Получаем текущего авторизованного пользователя из SharedPreferences
+    final currentUser = await UserStorage.getCurrentUser();
+    if (currentUser == null) {
       _showError('Ошибка: Пользователь не авторизован');
       return;
     }
+
+    // Достаем имя и телефон
+    final String clientName = currentUser['name'] ??
+        currentUser['fullName'] ??
+        currentUser['userName'] ??
+        'Имя пользователя';
+
+    final String clientPhone = currentUser['phone'] ??
+        currentUser['phoneNumber'] ??
+        '+373...';
+
+    final userId = currentUser['id'];
 
     showCupertinoDialog(
       context: context,
@@ -328,70 +314,37 @@ class _ExpressDeliveryScreenState extends State<ExpressDeliveryScreen> {
     );
 
     try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get(const GetOptions(source: Source.serverAndCache));
-
-      final userData = userDoc.data() ?? {};
-
-      final String clientName = userData['name'] ??
-          userData['fullName'] ??
-          userData['userName'] ??
-          userData['displayName'] ??
-          user.displayName ??
-          'Не указано';
-
-      final String clientPhone = userData['phone'] ??
-          userData['phoneNumber'] ??
-          userData['tel'] ??
-          userData['mobile'] ??
-          user.phoneNumber ??
-          'Не указано';
-
       final commentText = _descriptionController.text.trim().isEmpty
           ? 'Без описания'
           : _descriptionController.text.trim();
 
+      // Собираем JSON строго под колонки таблицы individual_deliveries
       final orderData = {
-        'type': 'delivery',
-        'subType': _selectedTaskType,
-        'pickupAddress': _pickupController.text.trim(),
-        'dropoffAddress': _dropoffController.text.trim(),
-        'pickupAddressId': _pickupAddressId,
-        'dropoffAddressId': _dropoffAddressId,
-        'description': commentText,
+        'user_id': userId,
+        'client_id': userId?.toString(),
+        'client_name': clientName,
+        'client_phone': clientPhone,
+        'name': clientName,
+        'phone': clientPhone,
+        'pickup_address': _pickupController.text.trim(),
+        'pickup_address_id': _pickupAddressId,
+        'dropoff_address': _dropoffController.text.trim(),
+        'dropoff_address_id': _dropoffAddressId,
         'distance_km': double.parse(_rawDistanceKm.toStringAsFixed(2)),
         'duration_min': _rawDurationMin,
-        'totalCost': _calculateFinalPrice().toInt(),
+        'total_cost': _calculateFinalPrice(),
+        'description': commentText,
+        'type': 'delivery',
+        'sub_type': _selectedTaskType, // 'buy', 'pickup', 'task'
         'status': 'new',
-        'createdAt': FieldValue.serverTimestamp(),
-        'userId': user.uid,
-        'clientId': user.uid,
-        'clientName': clientName,
-        'name': clientName,
-        'clientPhone': clientPhone,
-        'phone': clientPhone,
       };
 
-      // 🚀 1. Отправляем в диспетчерскую со ВСЕМИ параметрами
-      await AddressApiService.addOrder(
-        addressId: _pickupAddressId!,         // Откуда забираем
-        destinationId: _dropoffAddressId!,    // Куда везем (вторая точка)
-        groupId: 328,
-        phone: clientPhone,
-        comment: commentText,                 // Примечание (например, «молоко»)
-        carType: 1,                           // Укажи свою переменную типа машины, если есть
-        carServices: [],                      // Передай список ID выбранных услуг (например, [5])
-        radugaId: 0,                          // Если используется radugaId
-      );
+      // Отправляем через созданный метод для индивидуальных доставок
+      final bool success = await UserStorage.createIndividualOrder(orderData);
 
-      // 2. Сохраняем локально в Firestore
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('delivery_orders')
-          .add(orderData);
+      if (!success) {
+        throw Exception('Сервер не смог сохранить индивидуальную доставку');
+      }
 
       if (mounted) {
         Navigator.of(context, rootNavigator: true).pop();

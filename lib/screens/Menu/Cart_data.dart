@@ -1,3 +1,6 @@
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../NEW_MODELS/User_Storage.dart';
 import '../../models/dish_model.dart';
 import 'package:flutter/material.dart';
 
@@ -23,9 +26,23 @@ class CartItem {
 
   // Удобный геттер для совместимости со словом size и selectedSizeName
   String? get size => selectedSize;
-  String? get selectedSizeName => selectedSize; // 👈 Добавлено для полной совместимости
+  String? get selectedSizeName => selectedSize;
 
+  // 🔹 Безопасный геттер для получения ID блюда
+  String get id {
+    try {
+      final dynamic dishId = (dish as dynamic).id;
+      if (dishId != null) return dishId.toString();
+    } catch (_) {}
 
+    try {
+      if (dish is Map) {
+        return (dish['id'] ?? '').toString();
+      }
+    } catch (_) {}
+
+    return '';
+  }
 
   // 🔹 Метод для безопасного преобразования в Map<String, dynamic>
   Map<String, dynamic> toMap() {
@@ -42,7 +59,7 @@ class CartItem {
     };
   }
 
-  // 🔹 Добавляем поддержку оператора '[]', чтобы старый код с item['...'] не выдавал ошибок
+  // 🔹 Добавляем поддержку оператора '[]'
   dynamic operator [](String key) {
     switch (key) {
       case 'dish':
@@ -106,15 +123,12 @@ String? getExistingShopId(String userId) {
 
 // 🔹 Абсолютно надежная функция сравнения товаров
 bool _areDishesEqual(CartItem itemA, CartItem itemB) {
-  // 1. Имя блюда должно совпадать строго
   if (itemA.dish.name.trim() != itemB.dish.name.trim()) return false;
 
-  // 2. Сравнение размеров с нормализацией
   final sizeA = (itemA.selectedSize ?? '').trim().toLowerCase();
   final sizeB = (itemB.selectedSize ?? '').trim().toLowerCase();
   if (sizeA != sizeB) return false;
 
-  // 3. Нормализация и сбор модификаторов в строковый массив для точного сравнения
   List<String> extractMods(List<dynamic>? mods) {
     if (mods == null || mods.isEmpty) return [];
     final list = <String>[];
@@ -176,7 +190,6 @@ void addToCartItem(
     selectedModifiers: selectedModifiers,
   );
 
-  // Ищем товар с учетом имени, размера и модификаторов
   final index = cart.value.indexWhere((e) => _areDishesEqual(e, newItem));
 
   if (index == -1) {
@@ -262,21 +275,80 @@ double getCartTotal(String userId, [String? shopId]) {
   return cart.value.fold(0, (sum, item) => sum + item.itemTotalWithModifiers);
 }
 
-void clearCart(String userId, [String? shopId]) {
-  if (shopId != null) {
-    getCart(userId, shopId).value = [];
-  } else {
-    cartByUser[userId]?.forEach((key, notifier) {
-      notifier.value = [];
-    });
-    currentActiveShopId.value = null;
+Future<void> clearCart(String userId, [String? shopId]) async {
+  print('🗑️ [DEBUG CLEAR] === НАЧАЛО ОЧИСТКИ === для userId: $userId, shopId: $shopId');
+
+  // 1. Очищаем оперативную память для переданного userId
+  if (cartByUser.containsKey(userId)) {
+    final userCarts = cartByUser[userId]!;
+    if (shopId != null && userCarts.containsKey(shopId)) {
+      userCarts[shopId]!.value = [];
+    } else {
+      userCarts.forEach((key, notifier) {
+        notifier.value = [];
+      });
+      userCarts.clear();
+    }
   }
-  _syncCombinedCart(userId);
+
+  // 🔹 СТРАХОВКА: Проходим по всем сессиям в памяти
+  cartByUser.forEach((mapKey, userCarts) {
+    if (shopId != null && userCarts.containsKey(shopId)) {
+      userCarts[shopId]!.value = [];
+    } else {
+      userCarts.forEach((key, notifier) {
+        notifier.value = [];
+      });
+      userCarts.clear();
+    }
+  });
+
+  // 🔴 ГАРАНТИЯ: Принудительно сбрасываем общую сводную корзину (shopId: null) в памяти,
+  // чтобы интерфейс сразу видел пустой список и обнулял итоговую сумму.
+  final combinedCart = getCart(userId, null);
+  combinedCart.value = [];
+
+  currentActiveShopId.value = null;
+
+  // 2. Очищаем SharedPreferences (удаляем всё, что связано с этим магазином или юзером)
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getKeys();
+    for (final key in keys) {
+      if (key.contains('cart_') && (shopId == null || key.contains('_$shopId'))) {
+        await prefs.remove(key);
+      }
+    }
+    print('🗑️ [DEBUG CLEAR] Корзина успешно удалена из SharedPreferences');
+  } catch (e) {
+    print('Ошибка при очистке корзины в SharedPreferences: $e');
+  }
+
+  print('🗑️ [DEBUG CLEAR] === КОНЕЦ ОЧИСТКИ. Все корзины сброшены ===');
 }
 
 void _syncCombinedCart(String userId) {
+  final userCart = cartByUser[userId];
+
+  // 🔹 Если корзина пуста или содержит только пустой null-ключ — просто обнуляем combined и выходим
+  if (userCart == null || userCart.isEmpty || (userCart.length == 1 && userCart.containsKey(null))) {
+    if (userCart != null && userCart.containsKey(null)) {
+      userCart[null]?.value = [];
+    } else {
+      getCart(userId, null).value = [];
+    }
+    return;
+  }
+
+  final combinedItems = _combineAllCarts(userId);
+
+  // 🔹 Дополнительная проверка: если объединенный список пуст, гарантированно очищаем
   final combinedCart = getCart(userId, null);
-  combinedCart.value = List.from(_combineAllCarts(userId));
+  if (combinedItems.isEmpty) {
+    combinedCart.value = [];
+  } else {
+    combinedCart.value = List.from(combinedItems);
+  }
 }
 
 List<CartItem> _combineAllCarts(String userId) {

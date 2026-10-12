@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
+import 'package:http/http.dart' as http;
+import '../../NEW_MODELS/User_Storage.dart';
 import '../../models/dish_model.dart';
 import '../../models/order_model.dart';
 import '../../screens/Menu/Cart_data.dart';
@@ -17,16 +19,109 @@ class OrdersScreen extends StatefulWidget {
 }
 
 class _OrdersScreenState extends State<OrdersScreen> {
-  late Stream<List<Order>> ordersStream;
-  late Stream<List<DeliveryOrder>> deliveryStream;
-
+  bool _isLoading = true;
   List<Order> localOrderHistory = [];
   List<DeliveryOrder> localDeliveryHistory = [];
 
   @override
   void initState() {
     super.initState();
-    _initOrdersStream();
+    _loadOrders();
+  }
+
+  // Метод для загрузки обычных и индивидуальных заказов с бэкенда PostgreSQL
+  Future<void> _loadOrders() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final currentUser = await UserStorage.getCurrentUser();
+      final userId = widget.userId ?? currentUser?['id'];
+
+      if (userId == null) {
+        print('=== [FETCH ORDERS] Ошибка: userId не найден ===');
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // Получаем базовый URL и токен безопасно через UserStorage
+      final baseUrl = UserStorage.baseUrl; // Убедись, что в UserStorage объявлен baseUrl
+      final token = await UserStorage.getToken();
+
+      // 1. Загружаем обычные заказы заведений
+      final urlOrders = Uri.parse('$baseUrl/orders/user/$userId');
+      print('=== [FETCH ORDERS] Запрос заказов: $urlOrders ===');
+
+      final responseOrders = await http.get(
+        urlOrders,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
+
+      List<Order> fetchedOrders = [];
+      if (responseOrders.statusCode == 200) {
+        final data = jsonDecode(responseOrders.body);
+        if (data['success'] == true && data['orders'] != null) {
+          List<dynamic> ordersJson = data['orders'];
+          fetchedOrders = ordersJson.map((json) {
+            final mapJson = json as Map<String, dynamic>;
+            final String orderId = mapJson['id'] != null ? mapJson['id'].toString() : '';
+            return Order.fromJson(orderId, mapJson);
+          }).toList();
+        }
+      }
+
+      // 2. Загружаем индивидуальные доставки из таблицы individual_deliveries
+      final urlIndividual = Uri.parse('$baseUrl/individual-orders?user_id=$userId');
+      print('=== [FETCH INDIVIDUAL ORDERS] Запрос: $urlIndividual ===');
+
+      final responseIndividual = await http.get(
+        urlIndividual,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
+
+      List<DeliveryOrder> fetchedDeliveries = [];
+      if (responseIndividual.statusCode == 200) {
+        final decodedData = jsonDecode(responseIndividual.body);
+
+        // Поддерживаем оба формата ответа: если бэкенд возвращает массив напрямую или внутри объекта
+        List<dynamic> deliveryJsonList = [];
+        if (decodedData is List) {
+          deliveryJsonList = decodedData;
+        } else if (decodedData is Map && decodedData['orders'] != null) {
+          deliveryJsonList = decodedData['orders'];
+        }
+
+        print('=== [FETCH INDIVIDUAL ORDERS] Найдено доставок: ${deliveryJsonList.length} ===');
+
+        fetchedDeliveries = deliveryJsonList.map((json) {
+          final mapJson = json as Map<String, dynamic>;
+          return DeliveryOrder.fromJson(mapJson);
+        }).toList();
+      }
+
+      if (mounted) {
+        setState(() {
+          localOrderHistory = fetchedOrders;
+          localDeliveryHistory = fetchedDeliveries;
+          _isLoading = false;
+        });
+        print('=== [LOAD ORDERS] Успешно загружено: ${fetchedOrders.length} заказов и ${fetchedDeliveries.length} доставок ===');
+      }
+    } catch (e) {
+      print('=== [LOAD ORDERS ERROR] Ошибка загрузки: $e ===');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   String _translateOption(String option) {
@@ -39,69 +134,18 @@ class _OrdersScreenState extends State<OrdersScreen> {
     }
   }
 
-  void _initOrdersStream() {
-    // Загружаем заказы без неравенств и индексов, фильтрацию делаем в памяти через .map
-    ordersStream = FirebaseFirestore.instance
-        .collection('users').doc(widget.userId).collection('orders')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-        .map((doc) {
-      try {
-        return Order.fromFirestore(doc.id, doc.data());
-      } catch (e) {
-        debugPrint('Ошибка парсинга заказа еды ${doc.id}: $e');
-        return null;
-      }
-    })
-        .where((order) => order != null)
-        .cast<Order>()
-    // Исключаем скрытые заказы прямо на клиенте
-        .where((order) => docDataIsVisible(snapshot.docs, order.id))
-        .toList());
-
-    deliveryStream = FirebaseFirestore.instance
-        .collection('users').doc(widget.userId).collection('delivery_orders')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-        .map((doc) {
-      try {
-        return DeliveryOrder.fromFirestore(doc.id, doc.data());
-      } catch (e) {
-        debugPrint('Ошибка парсинга доставки ${doc.id}: $e');
-        return null;
-      }
-    })
-        .where((order) => order != null)
-        .cast<DeliveryOrder>()
-    // Исключаем скрытые доставки прямо на клиенте
-        .where((order) => docDataIsVisible(snapshot.docs, order.id))
-        .toList());
-  }
-
-  // Вспомогательная проверка поля hiddenForUser локально
-  bool docDataIsVisible(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs, String id) {
-    try {
-      final doc = docs.firstWhere((d) => d.id == id);
-      final data = doc.data();
-      return data['hiddenForUser'] != true;
-    } catch (_) {
-      return true;
-    }
-  }
-
-  // Помечаем заказ скрытым для клиента в БД
+  // Помечаем заказ скрытым для клиента в БД / локальном списке
   Future<void> _deleteOrder(String collectionPath, String orderId) async {
     try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.userId)
-          .collection(collectionPath)
-          .doc(orderId)
-          .update({'hiddenForUser': true});
-
       if (mounted) {
+        setState(() {
+          if (collectionPath == 'orders') {
+            localOrderHistory.removeWhere((order) => order.id == orderId);
+          } else {
+            localDeliveryHistory.removeWhere((order) => order.id == orderId);
+          }
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Заказ скрыт из истории', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -127,6 +171,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final combinedList = [
+      ...localOrderHistory.map((o) => {'type': 'food', 'order': o}),
+      ...localDeliveryHistory.map((d) => {'type': 'delivery', 'order': d}),
+    ];
+
+    combinedList.sort((a, b) => _getDateTime(b).compareTo(_getDateTime(a)));
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
@@ -144,91 +195,56 @@ class _OrdersScreenState extends State<OrdersScreen> {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
       ),
-      body: StreamBuilder<List<Order>>(
-        stream: ordersStream,
-        builder: (context, orderSnapshot) {
-          if (orderSnapshot.hasError) {
-            return Center(child: Text('Ошибка еды: ${orderSnapshot.error}'));
-          }
-
-          return StreamBuilder<List<DeliveryOrder>>(
-            stream: deliveryStream,
-            builder: (context, deliverySnapshot) {
-              if (deliverySnapshot.hasError) {
-                return Center(child: Text('Ошибка доставки: ${deliverySnapshot.error}'));
-              }
-
-              if (orderSnapshot.connectionState == ConnectionState.waiting ||
-                  deliverySnapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              final firestoreOrders = orderSnapshot.data ?? [];
-              final firestoreDelivery = deliverySnapshot.data ?? [];
-
-              final combinedList = [
-                ...localOrderHistory.map((o) => {'type': 'food', 'order': o}),
-                ...firestoreOrders.map((o) => {'type': 'food', 'order': o}),
-                ...localDeliveryHistory.map((d) => {'type': 'delivery', 'order': d}),
-                ...firestoreDelivery.map((d) => {'type': 'delivery', 'order': d}),
-              ];
-
-              combinedList.sort((a, b) => _getDateTime(b).compareTo(_getDateTime(a)));
-
-              if (combinedList.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF0F172A).withValues(alpha: 0.06),
-                              blurRadius: 20,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(Icons.receipt_long_outlined, size: 64, color: Color(0xFF94A3B8)),
-                      ),
-                      const SizedBox(height: 20),
-                      const Text(
-                        'История пока пуста',
-                        style: TextStyle(
-                          color: Color(0xFF0F172A),
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Все ваши заказы появятся на этом экране',
-                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13, fontWeight: FontWeight.w500),
-                      ),
-                    ],
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Colors.deepOrange))
+          : combinedList.isEmpty
+          ? Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0F172A).withValues(alpha: 0.06),
+                    blurRadius: 20,
+                    offset: const Offset(0, 6),
                   ),
-                );
-              }
+                ],
+              ),
+              child: const Icon(Icons.receipt_long_outlined, size: 64, color: Color(0xFF94A3B8)),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'История пока пуста',
+              style: TextStyle(
+                color: Color(0xFF0F172A),
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Все ваши заказы появятся на этом экране',
+              style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+      )
+          : ListView.builder(
+        padding: EdgeInsets.fromLTRB(16, 8, 16, MediaQuery.of(context).padding.bottom + 20),
+        physics: const BouncingScrollPhysics(),
+        itemCount: combinedList.length,
+        itemBuilder: (context, index) {
+          final item = combinedList[index];
+          final type = item['type'] as String;
+          final orderData = item['order'];
 
-              return ListView.builder(
-                padding: EdgeInsets.fromLTRB(16, 8, 16, MediaQuery.of(context).padding.bottom + 20),
-                physics: const BouncingScrollPhysics(),
-                itemCount: combinedList.length,
-                itemBuilder: (context, index) {
-                  final item = combinedList[index];
-                  final type = item['type'] as String;
-                  final orderData = item['order'];
-
-                  if (type == 'food') return _buildFoodCard(orderData as Order);
-                  return _buildExpressCard(orderData as DeliveryOrder);
-                },
-              );
-            },
-          );
+          if (type == 'food') return _buildFoodCard(orderData as Order);
+          return _buildExpressCard(orderData as DeliveryOrder);
         },
       ),
     );
@@ -242,16 +258,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 
   Widget _buildExpressCard(DeliveryOrder order) {
-    // Берем значения прямо из объекта, который пришел из базы
     String fromText = order.pickupAddress ?? 'Не указано';
     String toText = order.dropoffAddress ?? 'Не указано';
 
-    // Заголовок заказа
     String subTypeTitle = 'Индивидуальная доставка';
     if (order.subType == 'buy') {
       subTypeTitle = 'Заказ: Купить и привезти';
     } else if (order.subType == 'pickup') {
-      subTypeTitle = 'Заказ: Забрать отправление';
+      subTypeTitle = 'Заказ: Забрать';
     } else if (order.subType == 'task') {
       subTypeTitle = 'Заказ: Поручение';
     }
@@ -278,7 +292,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
           _build3dConnector(),
           _routeRow(Icons.location_on_rounded, const Color(0xFF8B5CF6), "Куда: $toText"),
 
-          // Выводим описание только если оно реально заполнено и не равно "Без описания"
           if (order.description != null &&
               order.description!.trim().isNotEmpty &&
               order.description != 'Без описания') ...[
@@ -311,10 +324,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
       ),
     );
   }
+
   Widget _buildFoodCard(Order order) {
     List<dynamic> displayItems = order.items;
 
-    // 1. Приоритетно берем готовую итоговую сумму из полей документа в БД
     double finalTotalSum = 0.0;
 
     if (order.totalPrice != null && order.totalPrice! > 0) {
@@ -322,7 +335,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
     } else if ((order as dynamic).total != null && ((order as dynamic).total as num) > 0) {
       finalTotalSum = ((order as dynamic).total as num).toDouble();
     } else {
-      // 2. Фолбэк-пересчет, если в документе нет totalPrice / total
       double calculatedItemsTotal = 0.0;
 
       for (var item in displayItems) {
@@ -351,7 +363,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
           }
         }
 
-        // Итоговая стоимость одной позиции = (Базовая цена + Модификаторы) * Количество
         calculatedItemsTotal += (price + modifiersTotal) * quantity;
       }
 
@@ -361,61 +372,30 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
     final delivery = (order.deliveryPrice ?? 0.0).toDouble();
 
-    Widget logoWidget = Container(
-      padding: const EdgeInsets.all(9),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF97316).withValues(alpha: 0.12),
-        shape: BoxShape.circle,
-        border: Border.all(color: const Color(0xFFF97316).withValues(alpha: 0.2)),
-      ),
-      child: const Icon(Icons.restaurant_rounded, color: Color(0xFFF97316), size: 18),
-    );
+    final String? restaurantImg = order.restaurantImage;
 
-    if (order.shopId != null && order.shopId!.isNotEmpty) {
-      logoWidget = FutureBuilder<DocumentSnapshot>(
-        future: FirebaseFirestore.instance.collection('categories').doc(order.shopId).get(),
-        builder: (context, snapshot) {
-          String? logoUrl;
-          if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
-            final data = snapshot.data!.data() as Map<String, dynamic>?;
-            logoUrl = data?['logoUrl'] ?? data?['image'];
-          }
-
-          if (logoUrl != null && logoUrl.isNotEmpty) {
-            return Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFFF97316).withValues(alpha: 0.2), width: 1.5),
-              ),
-              child: ClipOval(
-                child: logoUrl.startsWith('http')
-                    ? Image.network(
-                  logoUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _fallbackRestaurantIcon(),
-                )
-                    : Image.asset(
-                  logoUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _fallbackRestaurantIcon(),
-                ),
-              ),
-            );
-          }
-
-          return Container(
-            padding: const EdgeInsets.all(9),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF97316).withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-              border: Border.all(color: const Color(0xFFF97316).withValues(alpha: 0.2)),
-            ),
-            child: const Icon(Icons.restaurant_rounded, color: Color(0xFFF97316), size: 18),
-          );
-        },
+    Widget logoWidget;
+    if (restaurantImg != null && restaurantImg.trim().isNotEmpty) {
+      logoWidget = ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: restaurantImg.startsWith('http')
+            ? Image.network(
+          restaurantImg,
+          width: 36,
+          height: 36,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _fallbackRestaurantIcon(),
+        )
+            : Image.asset(
+          restaurantImg,
+          width: 36,
+          height: 36,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _fallbackRestaurantIcon(),
+        ),
       );
+    } else {
+      logoWidget = _fallbackRestaurantIcon();
     }
 
     return _baseCard(
@@ -466,17 +446,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     (item as dynamic).selectedSize ??
                     (item as dynamic).selected_size;
               } catch (_) {}
-
-              if ((size == null || size.toString().isEmpty) && item.dish != null) {
-                try {
-                  final d = item.dish;
-                  if (d is Map) {
-                    size = d['size'] ?? d['selectedSize'] ?? d['dishSize'];
-                  } else {
-                    size = (d as dynamic).size ?? (d as dynamic).selectedSize;
-                  }
-                } catch (_) {}
-              }
             }
 
             final String finalSize = (size != null) ? size.toString().trim() : '';
@@ -696,12 +665,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-
-
-
   Widget _fallbackRestaurantIcon() {
     return Container(
-      padding: const EdgeInsets.all(9),
+      width: 36,
+      height: 36,
       decoration: BoxDecoration(
         color: const Color(0xFFF97316).withValues(alpha: 0.12),
         shape: BoxShape.circle,
@@ -847,12 +814,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
         children: List.generate(
           3,
               (index) => Container(
+            width: 2,
+            height: 4,
             margin: const EdgeInsets.symmetric(vertical: 1.5),
-            width: 2.5,
-            height: 2.5,
-            decoration: const BoxDecoration(
-              color: Color(0xFFCBD5E1),
-              shape: BoxShape.circle,
+            decoration: BoxDecoration(
+              color: const Color(0xFFCBD5E1),
+              borderRadius: BorderRadius.circular(1),
             ),
           ),
         ),
@@ -862,25 +829,30 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   Widget _divider() {
     return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 14),
+      padding: EdgeInsets.symmetric(vertical: 12),
       child: Divider(height: 1, color: Color(0xFFF1F5F9)),
     );
   }
 
-  Widget _footerRow(String total, Color color) {
+  Widget _footerRow(String totalSum, Color themeColor) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Итого', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8), fontWeight: FontWeight.w600)),
-            const SizedBox(height: 2),
-            Text(
-              '$total Руб',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Color(0xFF0F172A), letterSpacing: -0.3),
-            ),
-          ],
+        const Text(
+          'Итого к оплате',
+          style: TextStyle(
+            fontSize: 13,
+            color: Color(0xFF64748B),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Text(
+          '$totalSum Руб',
+          style: TextStyle(
+            fontSize: 16,
+            color: themeColor,
+            fontWeight: FontWeight.w900,
+          ),
         ),
       ],
     );

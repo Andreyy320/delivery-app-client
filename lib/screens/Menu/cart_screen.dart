@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // 🔹 Подключаем Firestore
 import 'Cart_data.dart';
 import 'checkout_screen.dart';
 import '../../Api_Servicess.dart'; // Подключаем сервис API для доступа к токену
@@ -8,33 +6,21 @@ import '../../Api_Servicess.dart'; // Подключаем сервис API дл
 class CartScreen extends StatelessWidget {
   final String? shopId;
   final String? restaurantName;
+  final String? restaurantImageUrl; // 👈 Картинка/логотип ресторана
+  final String userId; // 👈 Динамический параметр пользователя
 
   const CartScreen({
     super.key,
     this.shopId,
     this.restaurantName,
+    this.restaurantImageUrl,
+    required this.userId,
   });
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      return const Scaffold(
-        backgroundColor: Color(0xFFF8FAFC),
-        body: Center(
-          child: Text(
-            'Войдите в аккаунт',
-            style: TextStyle(
-              color: Color(0xFF64748B),
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      );
-    }
-
-    final userId = user.uid;
+    // 🔍 ДЕБАГ-ЛОГ ДЛЯ ПРОВЕРКИ ЛОГОТИПА В КОРЗИНЕ
+    print('📌 [DEBUG CART] Ресторан: "$restaurantName" | restaurantImageUrl: "$restaurantImageUrl"');
 
     // 🔹 Умное определение правильного shopId, чтобы экран не был пустым
     String? effectiveShopId = shopId;
@@ -67,9 +53,10 @@ class CartScreen extends StatelessWidget {
       body: ValueListenableBuilder<List<CartItem>>(
         valueListenable: cartNotifier,
         builder: (context, cart, _) {
-          // 🔹 Если в текущем айдишнике пусто, проверяем общую комбинированную корзину
-          final combinedCart = getCart(userId, null).value;
-          final displayCart = cart.isNotEmpty ? cart : combinedCart;
+          // 🔍 ЛОГИРУЕМ СОСТОЯНИЕ КОРЗИНЫ ПРИ КАЖДОЙ ПЕРЕРИСОВКЕ
+          print('🛒 [DEBUG CART BUILD] cart.length (для shop: $effectiveShopId): ${cart.length}');
+
+          final displayCart = cart;
 
           if (displayCart.isEmpty) {
             return Center(
@@ -85,7 +72,7 @@ class CartScreen extends StatelessWidget {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF0F172A).withOpacity(0.04),
+                            color: const Color(0xFF0F172A).withValues(alpha: 0.04),
                             blurRadius: 20,
                             offset: const Offset(0, 8),
                           )
@@ -170,10 +157,10 @@ class CartScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.black.withOpacity(0.04)),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withOpacity(0.04),
+            color: const Color(0xFF0F172A).withValues(alpha: 0.04),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -349,7 +336,7 @@ class CartScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.black.withOpacity(0.05)),
+                  border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -403,10 +390,7 @@ class CartScreen extends StatelessWidget {
       BuildContext context, String userId, List<CartItem> cart, String activeShopId) {
     final currentRestaurantName = restaurantName ?? 'Заказ из заведения';
     final double currentTotal = getCartTotal(userId, activeShopId);
-
-    // Получаем текущий список отображаемых товаров для передачи дальше
-    final combinedCart = getCart(userId, null).value;
-    final displayCart = cart.isNotEmpty ? cart : combinedCart;
+    final displayCart = cart;
 
     return SafeArea(
       bottom: true,
@@ -417,7 +401,7 @@ class CartScreen extends StatelessWidget {
           borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF0F172A).withOpacity(0.08),
+              color: const Color(0xFF0F172A).withValues(alpha: 0.08),
               blurRadius: 24,
               offset: const Offset(0, -8),
             )
@@ -485,42 +469,17 @@ class CartScreen extends StatelessWidget {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF0F172A).withOpacity(0.25),
+                          color: const Color(0xFF0F172A).withValues(alpha: 0.25),
                           blurRadius: 12,
                           offset: const Offset(0, 4),
                         )
                       ],
                     ),
                     child: ElevatedButton(
-                      onPressed: () async {
-                        // 🔹 Получаем токен из сервиса
+                      onPressed: () {
                         final token = AddressApiService.authToken ?? '';
-
-                        // Переменные координат ресторана по умолчанию (Тирасполь)
                         double resLat = 46.838444;
                         double resLng = 29.588252;
-
-                        // 🔹 Извлекаем точные координаты заведения из коллекции categories
-                        if (activeShopId.isNotEmpty) {
-                          try {
-                            final doc = await FirebaseFirestore.instance
-                                .collection('categories')
-                                .doc(activeShopId)
-                                .get();
-
-                            if (doc.exists && doc.data() != null) {
-                              final data = doc.data()!;
-                              if (data['lat'] != null) {
-                                resLat = double.tryParse(data['lat'].toString()) ?? resLat;
-                              }
-                              if (data['lng'] != null) {
-                                resLng = double.tryParse(data['lng'].toString()) ?? resLng;
-                              }
-                            }
-                          } catch (e) {
-                            debugPrint('Ошибка получения координат ресторана из Firestore: $e');
-                          }
-                        }
 
                         if (context.mounted) {
                           Navigator.push(
@@ -529,11 +488,12 @@ class CartScreen extends StatelessWidget {
                               builder: (_) => CheckoutScreen(
                                 shopId: activeShopId,
                                 restaurantName: currentRestaurantName,
+                                restaurantImageUrl: restaurantImageUrl ?? '',
                                 apiToken: token,
                                 restaurantLat: resLat,
                                 restaurantLng: resLng,
-                                cartItems: displayCart,       // 👈 Передаем список товаров
-                                productsTotal: currentTotal,  // 👈 Передаем общую сумму товаров
+                                cartItems: displayCart,
+                                productsTotal: currentTotal,
                               ),
                             ),
                           );
@@ -596,7 +556,7 @@ class CartScreen extends StatelessWidget {
           borderRadius: BorderRadius.circular(9),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 4,
             ),
           ],

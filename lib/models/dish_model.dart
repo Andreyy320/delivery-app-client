@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class DishSize {
   final String name;
   final double price;
@@ -24,6 +22,15 @@ class DishSize {
       weight: (json['weight'] ?? '0').toString(),
     );
   }
+
+  // 🔹 Добавлено для корректной сериализации в JSON (при оформлении заказа)
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'price': price,
+      'weight': weight,
+    };
+  }
 }
 
 class DishModifier {
@@ -47,9 +54,18 @@ class DishModifier {
       price: parsePrice(json['price']),
     );
   }
+
+  // 🔹 Добавлено для корректной сериализации в JSON (при оформлении заказа)
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'price': price,
+    };
+  }
 }
 
 class Dish {
+  final String id; // Поле id для полноценной работы с базой
   final String name;
   final String description;
   final double price;
@@ -58,25 +74,60 @@ class Dish {
   final String weight;
   final List<DishSize> sizes;
   final List<DishModifier> modifiers;
+  final bool isAvailable;
 
   Dish({
+    this.id = '',
     required this.name,
     required this.description,
     required this.price,
     required this.imagePath,
     required this.category,
-    this.weight = '0',         // 🔹 Необязательным со значением по умолчанию
-    this.sizes = const [],     // 🔹 Пустой список по умолчанию
-    this.modifiers = const [], // 🔹 Пустой список по умолчанию
+    this.weight = '0',
+    this.sizes = const [],
+    this.modifiers = const [],
+    this.isAvailable = true,
   });
 
-  // 🔹 Удобные геттеры для совместимости со старым кодом, обращающимся к dish.size
+  // Удобные геттеры для совместимости
   List<DishSize> get size => sizes;
   List<DishSize> get sizesList => sizes;
 
-  factory Dish.fromFirestore(DocumentSnapshot doc) {
-    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+  // 🔹 Добавляем поддержку оператора '[]', чтобы обращение к полям через dish['...'] работало без ошибок
+  dynamic operator [](String key) {
+    switch (key) {
+      case 'id':
+        return id;
+      case 'name':
+      case 'title':
+        return name;
+      case 'description':
+        return description;
+      case 'price':
+        return price;
+      case 'imagePath':
+      case 'image_path':
+      case 'imageUrl':
+        return imagePath;
+      case 'category':
+        return category;
+      case 'weight':
+        return weight;
+      case 'sizes':
+      case 'size':
+        return sizes;
+      case 'modifiers':
+        return modifiers;
+      case 'isAvailable':
+      case 'is_available':
+        return isAvailable;
+      default:
+        return null;
+    }
+  }
 
+  // Конструктор для работы с JSON от твоего Node.js сервера
+  factory Dish.fromJson(Map<String, dynamic> json) {
     double parsePrice(dynamic p) {
       if (p is num) return p.toDouble();
       if (p is String) return double.tryParse(p) ?? 0.0;
@@ -84,28 +135,52 @@ class Dish {
     }
 
     List<DishSize> parsedSizes = [];
-    if (data['size'] != null && data['size'] is List) {
-      parsedSizes = (data['size'] as List)
+    final sizeData = json['size'] ?? json['sizes'];
+    if (sizeData != null && sizeData is List) {
+      parsedSizes = sizeData
           .map((item) => DishSize.fromJson(item as Map<String, dynamic>))
           .toList();
     }
 
     List<DishModifier> parsedModifiers = [];
-    if (data['modifiers'] != null && data['modifiers'] is List) {
-      parsedModifiers = (data['modifiers'] as List)
+    if (json['modifiers'] != null && json['modifiers'] is List) {
+      parsedModifiers = (json['modifiers'] as List)
           .map((item) => DishModifier.fromJson(item as Map<String, dynamic>))
           .toList();
     }
 
+    // Достаем имя блюда для fallback, если id не передан
+    final String parsedName = json['title'] ?? json['name'] ?? 'Без названия';
+
+    // Безопасно вытаскиваем ID из разных возможных вариантов в JSON
+    final String parsedId = (json['id'] ?? json['_id'] ?? json['dish_id'] ?? parsedName).toString();
+
     return Dish(
-      name: data['title'] ?? data['name'] ?? 'Без названия',
-      description: data['description'] ?? '',
-      price: parsePrice(data['price']),
-      imagePath: data['imageUrl'] ?? data['imagePath'] ?? '',
-      category: data['category'] ?? 'Общее',
-      weight: (data['weight'] ?? '0').toString(),
+      id: parsedId,
+      name: parsedName,
+      description: json['description'] ?? '',
+      price: parsePrice(json['price']),
+      imagePath: json['image_path'] ?? json['imageUrl'] ?? json['imagePath'] ?? '',
+      category: json['category'] ?? 'Общее',
+      weight: (json['weight'] ?? '0').toString(),
       sizes: parsedSizes,
       modifiers: parsedModifiers,
+      isAvailable: json['is_available'] ?? json['isAvailable'] ?? true,
     );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'description': description,
+      'price': price,
+      'imagePath': imagePath,
+      'category': category,
+      'weight': weight,
+      'sizes': sizes.map((s) => s.toJson()).toList(),
+      'modifiers': modifiers.map((m) => m.toJson()).toList(),
+      'isAvailable': isAvailable,
+    };
   }
 }

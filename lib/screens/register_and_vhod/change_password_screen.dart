@@ -1,5 +1,5 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../NEW_MODELS/User_Storage.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
@@ -18,55 +18,54 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   bool _obscureNew = true;
   bool _obscureRepeat = true;
 
-  // Твоя логика без изменений
+  // 🔹 Логика через твой UserStorage
   Future<void> _changePassword() async {
-    setState(() => isLoading = true);
-
     final oldPassword = _oldPasswordController.text.trim();
     final newPassword = _newPasswordController.text.trim();
     final repeatPassword = _repeatPasswordController.text.trim();
 
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      _showMessage('Пользователь не найден');
-      setState(() => isLoading = false);
+    if (oldPassword.isEmpty || newPassword.isEmpty || repeatPassword.isEmpty) {
+      _showMessage('Заполните все поля');
       return;
     }
 
     if (newPassword.length < 6) {
       _showMessage('Минимум 6 символов');
-      setState(() => isLoading = false);
       return;
     }
 
     if (newPassword != repeatPassword) {
       _showMessage('Пароли не совпадают');
-      setState(() => isLoading = false);
       return;
     }
 
+    setState(() => isLoading = true);
+
     try {
-      final cred = EmailAuthProvider.credential(
-        email: user.email!,
-        password: oldPassword,
+      // Вызываем метод смены пароля из твоего UserStorage
+      final result = await UserStorage.changePassword(
+        oldPassword: oldPassword,
+        newPassword: newPassword,
       );
 
-      await user.reauthenticateWithCredential(cred);
-      await user.updatePassword(newPassword);
-
       setState(() => isLoading = false);
 
-      _showMessage('Пароль успешно изменён');
-      if (mounted) {
-        Navigator.of(context).popUntil((route) => route.isFirst);
+      if (result['success'] == true) {
+        _showMessage(result['message']);
+        if (mounted) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      } else {
+        _showMessage(result['message']);
       }
     } catch (e) {
-      _showMessage('Ошибка: неверный старый пароль');
       setState(() => isLoading = false);
+      _showMessage('Ошибка подключения к серверу');
     }
   }
 
   void _showMessage(String text) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -74,7 +73,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
         ),
         backgroundColor:
-        text.contains('Ошибка') ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+        text.contains('Ошибка') || text.contains('не совпадают') || text.contains('Заполните') || text.contains('Требуется')
+            ? const Color(0xFFEF4444)
+            : const Color(0xFF10B981),
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

@@ -1,18 +1,22 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/dish_model.dart';
 import 'package:untitled1/screens/Menu/cart_screen.dart';
 import 'package:untitled1/screens/Menu/Cart_data.dart';
+import '../NEW_MODELS/User_Storage.dart';
 
 class RestaurantMenuScreen extends StatefulWidget {
   final String restaurantName;
   final String shopId;
+  final String userId;
+  final String? restaurantImageUrl;
 
   const RestaurantMenuScreen({
     super.key,
     required this.restaurantName,
     required this.shopId,
+    required this.userId,
+    this.restaurantImageUrl,
   });
 
   @override
@@ -29,10 +33,43 @@ class _RestaurantMenuScreenState extends State<RestaurantMenuScreen> {
   List<String> _categories = [];
   bool _isManualScrolling = false;
 
+  bool _isLoading = true;
+  List<Dish> _allItems = [];
+  String? _errorMessage;
+
   @override
   void initState() {
     super.initState();
+    // 🔹 Вывод в консоль для проверки переданного логотипа
+    print('DEBUG: RestaurantMenuScreen initialized.');
+    print('DEBUG: restaurantName -> ${widget.restaurantName}');
+    print('DEBUG: restaurantImageUrl -> ${widget.restaurantImageUrl}');
+
     _scrollController.addListener(_onScroll);
+    _loadMenu();
+  }
+
+  Future<void> _loadMenu() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+
+      final rawData = await UserStorage.getMenu(widget.shopId);
+      final dishes = rawData.map((json) => Dish.fromJson(json)).toList();
+
+      setState(() {
+        _allItems = dishes.where((dish) => dish.isAvailable == true).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Ошибка при загрузке меню: $e');
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Не удалось загрузить меню';
+      });
+    }
   }
 
   @override
@@ -89,19 +126,65 @@ class _RestaurantMenuScreenState extends State<RestaurantMenuScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final userId = FirebaseAuth.instance.currentUser?.uid ?? "";
+    final String userId = widget.userId;
+
+    final filteredItems = _allItems
+        .where((item) =>
+    item.name.toLowerCase().contains(_searchQuery) ||
+        item.category.toLowerCase().contains(_searchQuery))
+        .toList();
+
+    final currentCategories =
+    filteredItems.map((e) => e.category).toSet().toList();
+
+    if (_categories.join() != currentCategories.join()) {
+      _categories = currentCategories;
+      for (var cat in _categories) {
+        _categoryKeys.putIfAbsent(cat, () => GlobalKey());
+      }
+      if (_categories.isNotEmpty &&
+          (_activeCategory.isEmpty || !_categories.contains(_activeCategory))) {
+        _activeCategory = _categories.first;
+      }
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: Text(
-          widget.restaurantName,
-          style: const TextStyle(
-            fontWeight: FontWeight.w900,
-            fontSize: 20,
-            letterSpacing: -0.5,
-            color: Color(0xFF0F172A),
-          ),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.restaurantImageUrl != null &&
+                widget.restaurantImageUrl!.isNotEmpty) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(
+                  widget.restaurantImageUrl!,
+                  width: 32,
+                  height: 32,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const Icon(
+                    Icons.store,
+                    size: 32,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+            ],
+            Flexible(
+              child: Text(
+                widget.restaurantName,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 18,
+                  letterSpacing: -0.5,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ),
+          ],
         ),
         centerTitle: true,
         backgroundColor: const Color(0xFFF8FAFC),
@@ -124,12 +207,32 @@ class _RestaurantMenuScreenState extends State<RestaurantMenuScreen> {
                         builder: (_) => CartScreen(
                           shopId: widget.shopId,
                           restaurantName: widget.restaurantName,
+                          userId: userId,
+                          restaurantImageUrl: widget.restaurantImageUrl, // 👈 Добавьте эту строку
                         ),
                       ),
                     ),
                   ),
                   if (cart.isNotEmpty)
-                    PositionByRelative(cart.length.toString()),
+                    Positioned(
+                      right: 6,
+                      top: 6,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFEF4444),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          cart.length.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               );
             },
@@ -137,209 +240,208 @@ class _RestaurantMenuScreenState extends State<RestaurantMenuScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('categories')
-            .doc(widget.shopId)
-            .collection('menu')
-            .where('isAvailable', isEqualTo: true)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return const Center(
-              child: Text('Ошибка загрузки',
-                  style: TextStyle(color: Color(0xFF64748B))),
-            );
-          }
-          if (!snapshot.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(
-                  color: Color(0xFF0F172A), strokeWidth: 2.5),
-            );
-          }
-
-          final allItems =
-          snapshot.data!.docs.map((doc) => Dish.fromFirestore(doc)).toList();
-
-          final filteredItems = allItems
-              .where((item) =>
-          item.name.toLowerCase().contains(_searchQuery) ||
-              item.category.toLowerCase().contains(_searchQuery))
-              .toList();
-
-          final currentCategories =
-          filteredItems.map((e) => e.category).toSet().toList();
-          if (_categories.join() != currentCategories.join()) {
-            _categories = currentCategories;
-            for (var cat in _categories) {
-              _categoryKeys.putIfAbsent(cat, () => GlobalKey());
-            }
-            if (_categories.isNotEmpty && _activeCategory.isEmpty) {
-              _activeCategory = _categories.first;
-            }
-          }
-
-          return Column(
-            children: [
-              // ПОЛЕ ПОИСКА БЛЮД
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF0F172A).withOpacity(0.04),
-                        blurRadius: 14,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+      body: _isLoading
+          ? const Center(
+        child: CircularProgressIndicator(
+            color: Color(0xFF0F172A), strokeWidth: 2.5),
+      )
+          : _errorMessage != null
+          ? Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(_errorMessage!,
+                style: const TextStyle(color: Color(0xFF64748B))),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: _loadMenu,
+              child: const Text('Повторить'),
+            ),
+          ],
+        ),
+      )
+          : Column(
+        children: [
+          // ПОЛЕ ПОИСКА БЛЮД
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0F172A)
+                        .withValues(alpha: 0.04),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
                   ),
-                  child: TextField(
-                    onChanged: (v) =>
-                        setState(() => _searchQuery = v.toLowerCase()),
-                    style: const TextStyle(
-                      color: Color(0xFF0F172A),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                    decoration: const InputDecoration(
-                      hintText: 'Найдите любимое блюдо...',
-                      hintStyle:
-                      TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
-                      prefixIcon: Icon(Icons.search_rounded,
-                          color: Color(0xFF64748B), size: 22),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
+                ],
+              ),
+              child: TextField(
+                onChanged: (v) =>
+                    setState(() => _searchQuery = v.toLowerCase()),
+                style: const TextStyle(
+                  color: Color(0xFF0F172A),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+                decoration: const InputDecoration(
+                  hintText: 'Найдите любимое блюдо...',
+                  hintStyle: TextStyle(
+                      color: Color(0xFF94A3B8), fontSize: 14),
+                  prefixIcon: Icon(Icons.search_rounded,
+                      color: Color(0xFF64748B), size: 22),
+                  border: InputBorder.none,
+                  contentPadding:
+                  EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
+            ),
+          ),
 
-              // ГОРИЗОНТАЛЬНОЕ МЕНЮ КАТЕГОРИЙ
-              if (_categories.isNotEmpty)
-                SizedBox(
-                  height: 52,
-                  child: ListView.builder(
-                    controller: _categoryScrollController,
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _categories.length,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    physics: const BouncingScrollPhysics(),
-                    itemBuilder: (context, index) {
-                      final cat = _categories[index];
-                      final isActive = _activeCategory == cat;
-                      return GestureDetector(
-                        onTap: () => _scrollToCategory(cat),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 250),
-                          margin: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 6),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: isActive
-                                ? const Color(0xFF0F172A)
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: isActive
-                                  ? Colors.transparent
-                                  : Colors.black.withOpacity(0.05),
-                            ),
-                            boxShadow: isActive
-                                ? [
-                              BoxShadow(
-                                color: const Color(0xFF0F172A)
-                                    .withOpacity(0.2),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              )
-                            ]
-                                : [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.02),
-                                blurRadius: 4,
-                              )
-                            ],
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            cat,
-                            style: TextStyle(
-                              color: isActive
-                                  ? Colors.white
-                                  : const Color(0xFF475569),
-                              fontWeight: isActive
-                                  ? FontWeight.w800
-                                  : FontWeight.w600,
-                              fontSize: 13,
-                            ),
-                          ),
+          // ГОРИЗОНТАЛЬНОЕ МЕНЮ КАТЕГОРИЙ
+          if (_categories.isNotEmpty)
+            SizedBox(
+              height: 52,
+              child: ListView.builder(
+                controller: _categoryScrollController,
+                scrollDirection: Axis.horizontal,
+                itemCount: _categories.length,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                physics: const BouncingScrollPhysics(),
+                itemBuilder: (context, index) {
+                  final cat = _categories[index];
+                  final isActive = _activeCategory == cat;
+                  return GestureDetector(
+                    onTap: () => _scrollToCategory(cat),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 250),
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isActive
+                            ? const Color(0xFF0F172A)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isActive
+                              ? Colors.transparent
+                              : Colors.black.withValues(alpha: 0.05),
                         ),
-                      );
-                    },
-                  ),
+                        boxShadow: isActive
+                            ? [
+                          BoxShadow(
+                            color: const Color(0xFF0F172A)
+                                .withValues(alpha: 0.2),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          )
+                        ]
+                            : [
+                          BoxShadow(
+                            color: Colors.black
+                                .withValues(alpha: 0.02),
+                            blurRadius: 4,
+                          )
+                        ],
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        cat,
+                        style: TextStyle(
+                          color: isActive
+                              ? Colors.white
+                              : const Color(0xFF475569),
+                          fontWeight: isActive
+                              ? FontWeight.w800
+                              : FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+          // СПИСОК БЛЮД ПО КАТЕГОРИЯМ
+          Expanded(
+            child: filteredItems.isEmpty
+                ? const Center(
+              child: Text(
+                'Блюда не найдены',
+                style: TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
                 ),
+              ),
+            )
+                : ListView.builder(
+              controller: _scrollController,
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.only(
+                  top: 10, bottom: 30),
+              itemCount: _categories.length,
+              itemBuilder: (context, index) {
+                final category = _categories[index];
+                final itemsInCategory = filteredItems
+                    .where((i) => i.category == category)
+                    .toList();
 
-              // СПИСОК БЛЮД ПО КАТЕГОРИЯМ
-              Expanded(
-                child: ListView.builder(
-                  controller: _scrollController,
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.only(top: 10, bottom: 30),
-                  itemCount: _categories.length,
-                  itemBuilder: (context, index) {
-                    final category = _categories[index];
-                    final itemsInCategory = filteredItems
-                        .where((i) => i.category == category)
-                        .toList();
+                if (itemsInCategory.isEmpty) {
+                  return const SizedBox.shrink();
+                }
 
-                    if (itemsInCategory.isEmpty) return const SizedBox.shrink();
-
-                    return Column(
-                      key: _categoryKeys[category],
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 20, 16, 12),
-                          child: Text(
-                            category,
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: -0.6,
-                              color: Color(0xFF0F172A),
-                            ),
-                          ),
+                return Column(
+                  key: _categoryKeys[category],
+                  crossAxisAlignment:
+                  CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                          20, 20, 16, 12),
+                      child: Text(
+                        category,
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.6,
+                          color: Color(0xFF0F172A),
                         ),
-                        GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            childAspectRatio: 0.49,
-                            crossAxisSpacing: 14,
-                            mainAxisSpacing: 14,
-                          ),
-                          itemCount: itemsInCategory.length,
-                          itemBuilder: (context, i) => DishCardWithStatus(
+                      ),
+                    ),
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics:
+                      const NeverScrollableScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16),
+                      gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        childAspectRatio: 0.49,
+                        crossAxisSpacing: 14,
+                        mainAxisSpacing: 14,
+                      ),
+                      itemCount: itemsInCategory.length,
+                      itemBuilder: (context, i) =>
+                          DishCardWithStatus(
                             dish: itemsInCategory[i],
                             shopId: widget.shopId,
+                            userId: userId,
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ],
-          );
-        },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -349,8 +451,14 @@ class _RestaurantMenuScreenState extends State<RestaurantMenuScreen> {
 class DishCardWithStatus extends StatefulWidget {
   final Dish dish;
   final String shopId;
-  const DishCardWithStatus(
-      {required this.dish, required this.shopId, super.key});
+  final String userId;
+
+  const DishCardWithStatus({
+    required this.dish,
+    required this.shopId,
+    required this.userId,
+    super.key,
+  });
 
   @override
   State<DishCardWithStatus> createState() => _DishCardWithStatusState();
@@ -388,7 +496,7 @@ class _DishCardWithStatusState extends State<DishCardWithStatus> {
 
   @override
   Widget build(BuildContext context) {
-    final userId = FirebaseAuth.instance.currentUser?.uid ?? "";
+    final String userId = widget.userId;
 
     return ValueListenableBuilder<List<CartItem>>(
       valueListenable: getCart(userId, widget.shopId),
@@ -407,10 +515,10 @@ class _DishCardWithStatusState extends State<DishCardWithStatus> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.black.withOpacity(0.04)),
+                border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF0F172A).withOpacity(0.05),
+                    color: const Color(0xFF0F172A).withValues(alpha: 0.05),
                     blurRadius: 16,
                     offset: const Offset(0, 8),
                   )
@@ -449,11 +557,12 @@ class _DishCardWithStatusState extends State<DishCardWithStatus> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.95),
+                                  color: Colors.white.withValues(alpha: 0.95),
                                   borderRadius: BorderRadius.circular(12),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.08),
+                                      color: Colors.black
+                                          .withValues(alpha: 0.08),
                                       blurRadius: 6,
                                     )
                                   ],
@@ -533,8 +642,9 @@ class _DishCardWithStatusState extends State<DishCardWithStatus> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
                     child: GestureDetector(
-                      onTap: () => addToCartItem(userId, widget.shopId,
-                          widget.dish, context: context),
+                      onTap: () => addToCartItem(
+                          userId, widget.shopId, widget.dish,
+                          context: context),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 250),
                         height: 38,
@@ -548,7 +658,7 @@ class _DishCardWithStatusState extends State<DishCardWithStatus> {
                               : [
                             BoxShadow(
                               color: const Color(0xFF0F172A)
-                                  .withOpacity(0.25),
+                                  .withValues(alpha: 0.25),
                               blurRadius: 10,
                               offset: const Offset(0, 4),
                             )
@@ -587,9 +697,6 @@ class _DishCardWithStatusState extends State<DishCardWithStatus> {
     );
   }
 }
-
-
-
 
 
 /// Экран подробной информации о товаре (Модальное окно)

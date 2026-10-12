@@ -52,11 +52,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
     // ЛОГ 1: Что отправляем
     print('=== [REGISTRATION] Отправка запроса на сервер ===');
-    print('URL: http://10.0.2.2:3000/api/register');
+    print('URL: http://194.156.66.100:3100/api/register');
     print('Body: ${jsonEncode(requestBody)}');
 
     try {
-      const String url = 'http://10.0.2.2:3000/api/register';
+      const String url = 'http://194.156.66.100:3100/api/register';
 
       final response = await http.post(
         Uri.parse(url),

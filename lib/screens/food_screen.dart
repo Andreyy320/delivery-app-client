@@ -1,11 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'food_menu.dart';
+import '../NEW_MODELS/User_Storage.dart'; // 👈 Путь к вашему файлу с UserStorage
 
 class FoodRestaurantsScreen extends StatefulWidget {
-  final String? shopId;      // Принимаем ID заведения (если кликнули конкретное)
-  final String? shopName;    // Принимаем имя заведения
-  final String? categoryKey; // Или категорию для фильтрации
+  final String? shopId;
+  final String? shopName;
+  final String? categoryKey;
 
   const FoodRestaurantsScreen({
     super.key,
@@ -22,6 +22,42 @@ class _FoodRestaurantsScreenState extends State<FoodRestaurantsScreen> {
   String searchQuery = "";
   final TextEditingController _searchController = TextEditingController();
 
+  late Future<List<Map<String, dynamic>>> _restaurantsFuture;
+
+  // 👈 Переменная для хранения реального ID пользователя (по умолчанию 'local_user' на случай сбоя)
+  String _userId = 'local_user';
+
+  @override
+  void initState() {
+    super.initState();
+    _restaurantsFuture = _loadDataAndUser();
+  }
+
+  // 👈 Загружаем и заведения, и актуальный ID пользователя одновременно
+  Future<List<Map<String, dynamic>>> _loadDataAndUser() async {
+    try {
+      // Получаем данные текущего юзера из SharedPreferences
+      final currentUser = await UserStorage.getCurrentUser();
+      if (currentUser != null && currentUser['id'] != null) {
+        setState(() {
+          _userId = currentUser['id'].toString();
+        });
+      }
+
+      final shops = await UserStorage.getShops();
+
+      // Фильтрация по категории, если она передана и не равна 'all'
+      if (widget.categoryKey != null && widget.categoryKey != 'all') {
+        return shops.where((shop) => shop['category'] == widget.categoryKey).toList();
+      }
+
+      return shops;
+    } catch (e) {
+      print('Ошибка при загрузке данных: $e');
+      throw Exception('Не удалось загрузить заведения');
+    }
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -30,7 +66,6 @@ class _FoodRestaurantsScreenState extends State<FoodRestaurantsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Заголовок экрана: если передали имя заведения, пишем его, иначе общие «Заведения»
     final titleText = widget.shopName ?? 'Заведения и магазины';
 
     return Scaffold(
@@ -87,21 +122,10 @@ class _FoodRestaurantsScreenState extends State<FoodRestaurantsScreen> {
             ),
           ),
 
-          // Стрим из коллекции 'categories' (где лежат твои заведения)
+          // Загрузка данных через FutureBuilder
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: () {
-                var query = FirebaseFirestore.instance
-                    .collection('categories')
-                    .where('isActive', isEqualTo: true);
-
-                // Если передан конкретный ID, можно точечно вытащить (или грузить все активные)
-                if (widget.categoryKey != null && widget.categoryKey != 'all') {
-                  query = query.where('category', isEqualTo: widget.categoryKey);
-                }
-
-                return query.snapshots();
-              }(),
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: _restaurantsFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
@@ -109,23 +133,36 @@ class _FoodRestaurantsScreenState extends State<FoodRestaurantsScreen> {
                   );
                 }
 
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      'В базе данных пока нет активных заведений',
-                      style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+                if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          'В базе данных пока нет активных заведений',
+                          style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 12),
+                        ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _restaurantsFuture = _loadDataAndUser();
+                            });
+                          },
+                          child: const Text('Повторить'),
+                        ),
+                      ],
                     ),
                   );
                 }
 
-                // Локальная фильтрация по строке поиска
-                final docs = snapshot.data!.docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final name = (data['name'] ?? '').toString().toLowerCase();
+                // Локальная фильтрация по строке поиска (используем ключ 'title', который отдает бэкенд)
+                final restaurants = snapshot.data!.where((item) {
+                  final name = (item['title'] ?? '').toString().toLowerCase();
                   return name.contains(searchQuery);
                 }).toList();
 
-                if (docs.isEmpty) {
+                if (restaurants.isEmpty) {
                   return const Center(
                     child: Text(
                       'Ничего не найдено по вашему запросу',
@@ -136,15 +173,20 @@ class _FoodRestaurantsScreenState extends State<FoodRestaurantsScreen> {
 
                 return ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  itemCount: docs.length,
+                  itemCount: restaurants.length,
                   itemBuilder: (context, index) {
-                    final data = docs[index].data() as Map<String, dynamic>;
-                    final docId = docs[index].id;
+                    final data = restaurants[index];
 
-                    final name = data['name'] ?? 'Без названия';
-                    final logoUrl = data['logoUrl'] ?? '';
+                    // Соответствие ключей вашего бэкенда (/api/shops)
+                    final docId = data['id']?.toString() ?? '';
+                    final name = data['title'] ?? 'Без названия';
+                    final logoUrl = data['image_url'] ?? data['imageUrl'] ?? '';
+
+                    // 🔍 ДОБАВЛЯЕМ ЛОГ ДЛЯ ПРОВЕРКИ
+                    print('📌 [DEBUG RESTAURANTS] Заведение: "$name" | image_url: "${data['image_url']}" | imageUrl: "${data['imageUrl']}" | Итог logoUrl: "$logoUrl"');
+
                     final time = data['time'] ?? '9:00 - 23:00';
-                    final description = data['description'] ?? 'Экспресс доставка';
+                    final description = data['category'] ?? 'Экспресс доставка';
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 16),
@@ -165,13 +207,14 @@ class _FoodRestaurantsScreenState extends State<FoodRestaurantsScreen> {
                         child: InkWell(
                           borderRadius: BorderRadius.circular(24),
                           onTap: () {
-                            // Переход в меню конкретного заведения
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => RestaurantMenuScreen(
                                   shopId: docId,
                                   restaurantName: name,
+                                  restaurantImageUrl: logoUrl,
+                                  userId: _userId, // 👈 Передаем динамический userId (например, '4')
                                 ),
                               ),
                             );
@@ -204,7 +247,7 @@ class _FoodRestaurantsScreenState extends State<FoodRestaurantsScreen> {
                                   ),
                                 ),
                                 const SizedBox(width: 16),
-                                // Информация
+                                // Информация о заведении
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:latlong2/latlong.dart';
 
 class DeliveryOrder {
@@ -79,54 +78,67 @@ class DeliveryOrder {
     this.courierId,
   });
 
-  factory DeliveryOrder.fromFirestore(String id, Map<String, dynamic> map) {
+  /// Фабрика для создания объекта из данных PostgreSQL (Map<String, dynamic>)
+  factory DeliveryOrder.fromJson(Map<String, dynamic> map) {
+    // Координаты могут приходить как отдельными полями, так и вложенными объектами
     final pickupMap = map['pickup'] as Map<String, dynamic>? ?? {};
     final dropoffMap = map['dropoff'] as Map<String, dynamic>? ?? {};
 
     return DeliveryOrder(
-      id: id,
+      id: map['id']?.toString() ?? '',
       pickup: LatLng(
-        (pickupMap['lat'] ?? map['shopLat'] ?? 0).toDouble(),
-        (pickupMap['lon'] ?? pickupMap['lng'] ?? map['shopLng'] ?? 0).toDouble(),
+        (pickupMap['lat'] ?? map['pickup_lat'] ?? map['shopLat'] ?? 0).toDouble(),
+        (pickupMap['lon'] ?? pickupMap['lng'] ?? map['pickup_lon'] ?? map['shopLng'] ?? 0).toDouble(),
       ),
       dropoff: LatLng(
-        (dropoffMap['lat'] ?? dropoffMap['latitude'] ?? map['clientLat'] ?? 0).toDouble(),
-        (dropoffMap['lon'] ?? dropoffMap['lng'] ?? map['clientLng'] ?? 0).toDouble(),
+        (dropoffMap['lat'] ?? dropoffMap['latitude'] ?? map['dropoff_lat'] ?? map['clientLat'] ?? 0).toDouble(),
+        (dropoffMap['lon'] ?? dropoffMap['lng'] ?? map['dropoff_lon'] ?? map['clientLng'] ?? 0).toDouble(),
       ),
 
-      // 🛠 Исправлено: теперь сначала ищем прямо в корне (`map['pickupAddress']`), как у тебя в базе
-      pickupAddress: map['pickupAddress'] ?? pickupMap['address'] ?? map['restaurantAddress'],
-      dropoffAddress: map['dropoffAddress'] ?? dropoffMap['address'] ?? map['clientAddress'] ?? map['address'],
+      // Маппинг полей под PostgreSQL колонки со скриншота
+      pickupAddress: map['pickup_address'] ?? map['pickupAddress'] ?? pickupMap['address'],
+      dropoffAddress: map['dropoff_address'] ?? map['dropoffAddress'] ?? dropoffMap['address'],
 
-      subType: map['subType'],
-      description: map['description'] ?? map['comment'] ?? map['de'],
-      clientName: map['clientName'] ?? map['name'],
-      clientPhone: map['clientPhone'] ?? map['phone'],
-      clientId: map['clientId'] ?? map['userId'],
-      recipientName: map['receiverName'] ?? map['recipientName'] ?? map['recipient_name'],
-      recipientPhone: map['receiverPhone'] ?? map['recipientPhone'] ?? map['recipient_phone'],
-      comment: map['comment'] ?? map['de'],
+      subType: map['sub_type'] ?? map['subType'],
+      description: map['description'] ?? map['comment'],
+      clientName: map['client_name'] ?? map['clientName'] ?? map['name'],
+      clientPhone: map['client_phone'] ?? map['clientPhone'] ?? map['phone'],
+      clientId: map['client_id']?.toString() ?? map['clientId']?.toString() ?? map['user_id']?.toString(),
+
+      recipientName: map['recipient_name'] ?? map['recipientName'] ?? map['receiverName'],
+      recipientPhone: map['recipient_phone'] ?? map['recipientPhone'] ?? map['receiverPhone'],
+      comment: map['comment'],
+
       options: List<String>.from(map['options'] ?? []),
-      totalCost: (map['total_cost'] ?? map['totalCost'] ?? map['total'] ?? map['totalPrice'] ?? 0).toDouble(),
-      itemsPrice: (map['itemsPrice'] ?? map['items_price'])?.toDouble(),
-      deliveryPrice: (map['deliveryPrice'] ?? map['delivery_price'])?.toDouble(),
-      distanceKm: (map['distance_km'] ?? map['distanceKm'])?.toDouble(),
-      durationMin: (map['duration_min'] ?? map['durationMin'])?.toInt(),
+
+      totalCost: double.tryParse(map['total_cost']?.toString() ?? map['totalCost']?.toString() ?? '0') ?? 0.0,
+      itemsPrice: double.tryParse(map['items_price']?.toString() ?? map['itemsPrice']?.toString() ?? ''),
+      deliveryPrice: double.tryParse(map['delivery_price']?.toString() ?? map['deliveryPrice']?.toString() ?? ''),
+
+      distanceKm: double.tryParse(map['distance_km']?.toString() ?? map['distanceKm']?.toString() ?? ''),
+      durationMin: int.tryParse(map['duration_min']?.toString() ?? map['durationMin']?.toString() ?? ''),
+
       status: map['status'] ?? 'new',
-      createdAt: (map['created_at'] as Timestamp?)?.toDate() ??
-          (map['createdAt'] as Timestamp?)?.toDate() ??
-          DateTime.now(),
+
+      // Парсинг дат из PostgreSQL (обычно приходят как ISO-строки через JSON)
+      createdAt: map['created_at'] != null
+          ? DateTime.parse(map['created_at'].toString())
+          : (map['createdAt'] != null ? DateTime.parse(map['createdAt'].toString()) : DateTime.now()),
+
       type: map['type'] ?? 'delivery',
-      acceptedAt: (map['acceptedAt'] as Timestamp?)?.toDate(),
-      inProgressAt: (map['inProgressAt'] as Timestamp?)?.toDate(),
-      deliveredAt: (map['deliveredAt'] as Timestamp?)?.toDate(),
-      bodyType: map['bodyType'],
+
+      acceptedAt: map['accepted_at'] != null ? DateTime.parse(map['accepted_at'].toString()) : null,
+      inProgressAt: map['in_progress_at'] != null ? DateTime.parse(map['in_progress_at'].toString()) : null,
+      deliveredAt: map['delivered_at'] != null ? DateTime.parse(map['delivered_at'].toString()) : null,
+
+      bodyType: map['body_type'] ?? map['bodyType'],
       loaders: map['loaders'],
       escort: map['escort'],
-      scheduledTime: (map['scheduledTime'] as Timestamp?)?.toDate(),
-      restaurantName: map['restaurantName'] ?? map['shopName'],
-      shopId: map['shopId'],
-      courierId: map['courierId'],
+
+      scheduledTime: map['scheduled_time'] != null ? DateTime.parse(map['scheduled_time'].toString()) : null,
+      restaurantName: map['restaurant_name'] ?? map['restaurantName'] ?? map['shopName'],
+      shopId: map['shop_id']?.toString() ?? map['shopId']?.toString(),
+      courierId: map['courier_id']?.toString() ?? map['courierId']?.toString(),
     );
   }
 }

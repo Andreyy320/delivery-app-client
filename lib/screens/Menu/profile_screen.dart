@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../NEW_MODELS/User_Storage.dart';
 import '../../models/auth_state.dart';
-import '../register_and_vhod/about_app_screen.dart';
 import '../register_and_vhod/notification_settings_screen.dart';
 import '../register_and_vhod/partnerstvo_screen.dart';
 import '../register_and_vhod/user_storage.dart';
@@ -41,6 +39,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadUser() async {
     setState(() => isLoading = true);
     final user = await UserStorage.getCurrentUser();
+    print('ПРОЧИТАНО ИЗ ШАХРЫ (currentUser): $user'); // <--- Что здесь выводится?
+
     if (mounted) {
       setState(() {
         currentUser = user;
@@ -221,6 +221,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final name = currentUser?['name'] ?? 'Гость';
     final phone = currentUser?['phone'] ?? 'Не указан';
 
+    // Получаем ID пользователя из PostgreSQL (может называться 'id' или 'uid')
+    final userId = (currentUser?['id'] ?? currentUser?['uid'] ?? '').toString();
+
     return Scaffold(
       backgroundColor: _bgMain,
       body: SafeArea(
@@ -351,11 +354,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: _buildMenuCard([
                       _menuItem(Icons.history_rounded, 'История заказов', () {
-                        if (currentUser != null && currentUser!['uid'] != null) {
+                        if (userId.isNotEmpty) {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => OrdersScreen(userId: currentUser!['uid']),
+                              builder: (_) => OrdersScreen(userId: userId),
                             ),
                           );
                         }

@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-
+import '../NEW_MODELS/User_Storage.dart';
 import 'food_menu.dart';
-// Импортируйте ваш экран доставки (укажите правильный путь к файлу)
 import 'package:untitled1/screens/Dostavka/delivery_services_screen.dart';
 
 class RestaurantsPage extends StatefulWidget {
-  const RestaurantsPage({super.key});
+  final String userId; // 👈 Динамический параметр пользователя
+
+  const RestaurantsPage({
+    super.key,
+    required this.userId, // 👈 Обязательный параметр
+  });
 
   @override
   State<RestaurantsPage> createState() => _RestaurantsPageState();
@@ -18,14 +20,35 @@ class _RestaurantsPageState extends State<RestaurantsPage>
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
+  // Состояние для работы с бэкендом
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _shops = [];
+
   @override
   void initState() {
     super.initState();
+    _loadShops(); // Загружаем заведения при старте через твое API
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.trim().toLowerCase();
       });
     });
+  }
+
+  // Метод загрузки заведений с бэкенда
+  Future<void> _loadShops() async {
+    try {
+      final shopsData = await UserStorage.getShops();
+      setState(() {
+        _shops = shopsData;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Ошибка загрузки заведений: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -36,6 +59,15 @@ class _RestaurantsPageState extends State<RestaurantsPage>
 
   @override
   Widget build(BuildContext context) {
+    // 🔹 Используем переданный widget.userId
+    final String userId = widget.userId;
+
+    // Фильтруем заведения по поисковому запросу
+    final filteredShops = _shops.where((shop) {
+      final title = shop['title']?.toString().toLowerCase() ?? '';
+      return title.contains(_searchQuery);
+    }).toList();
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F5F7),
       body: SafeArea(
@@ -178,144 +210,87 @@ class _RestaurantsPageState extends State<RestaurantsPage>
 
                 const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-                // СПИСОК РЕЗУЛЬТАТОВ В РЕАЛЬНОМ ВРЕМЕНИ
-                StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('categories')
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const SliverFillRemaining(
-                        child: Center(
-                          child: CircularProgressIndicator(color: Color(
-                              0xFF0F172A)),
-                        ),
-                      );
-                    }
+                // СПИСОК ИЗ БАЗЫ ДАННЫХ ЧЕРЕЗ АПИ
+                _isLoading
+                    ? const SliverFillRemaining(
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                )
+                    : filteredShops.isEmpty
+                    ? const SliverFillRemaining(
+                  child: Center(
+                    child: Text(
+                      'Заведения не найдены',
+                      style: TextStyle(
+                        color: Color(0xFF94A3B8),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                )
+                    : SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                        final shop = filteredShops[index];
+                        final String shopId = shop['id'].toString();
+                        final String name = shop['title'] ?? 'Без названия';
+                        final String time = shop['time'] ?? '9:00 - 21:00';
 
-                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                      return const SliverFillRemaining(
-                        child: Center(
-                          child: Text(
-                            'Нет доступных заведений',
-                            style: TextStyle(fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF64748B)),
-                          ),
-                        ),
-                      );
-                    }
+                        // 🔍 ДЕБАГ-ПРОВЕРКА ССЫЛКИ НА КАРТИНКУ
+                        final String logoUrl = shop['image_url'] ?? shop['imageUrl'] ?? '';
+                        print('📌 [DEBUG SHOP] Заведение: "$name" | image_url: "${shop['image_url']}" | Итог logoUrl: "$logoUrl"');
 
-                    final docs = snapshot.data!.docs;
-                    final filteredRestaurants = docs.where((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
+                        final bool isOnline = shop['is_online'] ?? true;
+                        final String categoryKey = shop['category'] ?? '';
+                        final String cuisineType = _getSubtitleForCategory(categoryKey);
 
-                      final isActive = data['isActive'] ?? true;
-                      if (isActive != true) return false;
-
-                      if (_searchQuery.isNotEmpty) {
-                        final name = (data['name'] ?? '')
-                            .toString()
-                            .toLowerCase();
-                        return name.contains(_searchQuery);
-                      }
-
-                      return true;
-                    }).toList();
-
-                    if (filteredRestaurants.isEmpty) {
-                      return const SliverFillRemaining(
-                        child: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.search_off_rounded, size: 56,
-                                  color: Color(0xFFCBD5E1)),
-                              SizedBox(height: 12),
-                              Text(
-                                'Ничего не найдено',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF64748B),
+                        return _CleanRestaurantCard(
+                          title: name,
+                          time: time,
+                          imageUrl: logoUrl,
+                          isOnline: isOnline,
+                          rating: 4.8,
+                          deliveryPrice: 'Бесплатно',
+                          cuisineType: cuisineType,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              PageRouteBuilder(
+                                transitionDuration: const Duration(milliseconds: 300),
+                                pageBuilder: (_, animation, __) => RestaurantMenuScreen(
+                                  shopId: shopId,
+                                  restaurantName: name,
+                                  userId: userId,
+                                  restaurantImageUrl: logoUrl, // 👈 Передаем ссылку на логотип/картинку сюда!
                                 ),
+                                transitionsBuilder: (_, animation, __, child) {
+                                  final curved = CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeOutCubic);
+                                  return FadeTransition(
+                                    opacity: curved,
+                                    child: SlideTransition(
+                                      position: Tween<Offset>(
+                                          begin: const Offset(0, 0.05),
+                                          end: Offset.zero)
+                                          .animate(curved),
+                                      child: child,
+                                    ),
+                                  );
+                                },
                               ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-
-                    return SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                              (context, index) {
-                            final doc = filteredRestaurants[index];
-                            final docId = doc.id;
-                            final data = doc.data() as Map<String, dynamic>;
-
-                            final name = data['name'] ?? 'Заведение';
-                            final time = data['time'] ?? '9:00 - 21:00';
-                            final logoUrl = data['logoUrl'] ?? '';
-                            final isOnline = data['isOnline'] ?? false;
-                            final rating = (data['rating'] != null)
-                                ? (data['rating'] as num).toDouble()
-                                : 4.8;
-                            final deliveryPrice = data['deliveryPrice'] ??
-                                'Бесплатно';
-
-                            // Считываем тип заведения из поля базы (например, "product", "restaurant" и т.д.)
-                            // Если поля нет, берем дефолтное 'general'
-                            final categoryType = data['product'] ??
-                                data['category'] ?? 'general';
-                            final cuisineType = _getSubtitleForCategory(
-                                categoryType);
-
-                            return _CleanRestaurantCard(
-                              title: name,
-                              time: time,
-                              imageUrl: logoUrl,
-                              isOnline: isOnline,
-                              rating: rating,
-                              deliveryPrice: deliveryPrice,
-                              cuisineType: cuisineType,
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  PageRouteBuilder(
-                                    transitionDuration: const Duration(
-                                        milliseconds: 300),
-                                    pageBuilder: (_, animation, __) =>
-                                        RestaurantMenuScreen(
-                                          shopId: docId,
-                                          restaurantName: name,
-                                        ),
-                                    transitionsBuilder: (_, animation, __,
-                                        child) {
-                                      final curved = CurvedAnimation(
-                                          parent: animation,
-                                          curve: Curves.easeOutCubic);
-                                      return FadeTransition(
-                                        opacity: curved,
-                                        child: SlideTransition(
-                                          position: Tween<Offset>(
-                                              begin: const Offset(0, 0.05),
-                                              end: Offset.zero)
-                                              .animate(curved),
-                                          child: child,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                );
-                              },
                             );
                           },
-                          childCount: filteredRestaurants.length,
-                        ),
-                      ),
-                    );
-                  },
+                        );
+                      },
+                      childCount: filteredShops.length,
+                    ),
+                  ),
                 ),
 
                 const SliverToBoxAdapter(child: SizedBox(height: 40)),
@@ -327,7 +302,7 @@ class _RestaurantsPageState extends State<RestaurantsPage>
     );
   }
 
-// Метод для перевода типа из Firebase в красивую подпись на карточке
+  // Метод для перевода типа в красивую подпись на карточке
   String _getSubtitleForCategory(String categoryKey) {
     switch (categoryKey.toLowerCase()) {
       case 'product':
@@ -340,8 +315,7 @@ class _RestaurantsPageState extends State<RestaurantsPage>
         return 'Аптека • Здоровье';
       case 'stroimaterial':
         return 'Строительный • Магазин';
-      case 'odezhda': // исправлено с odejda
-      case 'odejda':
+      case 'odezhda':
         return 'Магазин • Одежда и обувь';
       case 'electronika':
         return 'Магазин • Электроника';
@@ -457,21 +431,11 @@ class _DeliveryBannerCardState extends State<_DeliveryBannerCard> {
 }
 
 // Постоянный контейнер хедера
-class _PersistentHeaderContainer extends StatefulWidget {
+class _PersistentHeaderContainer extends StatelessWidget {
   const _PersistentHeaderContainer();
 
   @override
-  State<_PersistentHeaderContainer> createState() => _PersistentHeaderContainerState();
-}
-
-class _PersistentHeaderContainerState extends State<_PersistentHeaderContainer>
-    with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-
-  @override
   Widget build(BuildContext context) {
-    super.build(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       child: Container(
@@ -494,7 +458,7 @@ class _PersistentHeaderContainerState extends State<_PersistentHeaderContainer>
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const _SmartUserGreeting(),
+                const _UserGreetingText('ПРИВЕТ, ПОЛЬЗОВАТЕЛЬ'),
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
@@ -532,53 +496,6 @@ class _PersistentHeaderContainerState extends State<_PersistentHeaderContainer>
           ],
         ),
       ),
-    );
-  }
-}
-
-// Интеллектуальный виджет приветствия
-class _SmartUserGreeting extends StatefulWidget {
-  const _SmartUserGreeting();
-
-  @override
-  State<_SmartUserGreeting> createState() => _SmartUserGreetingState();
-}
-
-class _SmartUserGreetingState extends State<_SmartUserGreeting> {
-  User? currentUser;
-
-  @override
-  void initState() {
-    super.initState();
-    FirebaseAuth.instance.authStateChanges().listen((user) {
-      if (mounted) {
-        setState(() {
-          currentUser = user;
-        });
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (currentUser == null) {
-      return const _UserGreetingText('ДОБРО ПОЖАЛОВАТЬ');
-    }
-
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).snapshots(),
-      builder: (context, userSnapshot) {
-        if (!userSnapshot.hasData) {
-          return const _UserGreetingText('ЗАГРУЗКА...');
-        }
-
-        String name = "Гость";
-        if (userSnapshot.data!.exists) {
-          final data = userSnapshot.data!.data() as Map<String, dynamic>?;
-          name = data?['name'] ?? "Пользователь";
-        }
-        return _UserGreetingText('ПРИВЕТ, ${name.toUpperCase()}');
-      },
     );
   }
 }

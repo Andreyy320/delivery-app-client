@@ -1,18 +1,16 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:untitled1/screens/Menu/cart_screen.dart';
 import 'package:untitled1/screens/Menu/orders_screen.dart';
 import 'package:untitled1/screens/Menu/profile_screen.dart';
 import 'package:untitled1/screens/categories_page.dart';
 import 'package:untitled1/screens/register_and_vhod/notification_service.dart';
-import 'package:untitled1/screens/register_and_vhod/user_storage.dart';
 import 'package:untitled1/screens/Menu/Cart_data.dart';
+import '../NEW_MODELS/User_Storage.dart';
 import '../models/auth_state.dart';
 
 final Map<String, String> _globalProcessedOrders = {};
-StreamSubscription<QuerySnapshot>? _ordersSubscription;
+StreamSubscription? _ordersSubscription;
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -24,8 +22,12 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   DateTime? _appStartTime;
-  StreamSubscription<User?>? _authSubscription;
+  VoidCallback? _authListener;
   bool _isDialogShowing = false;
+
+  // 🔹 Объявляем переменную для хранения текущего пользователя
+  dynamic _currentUser;
+  bool _isAuthRestored = false; // 👈 Флаг для контроля загрузки авторизации
 
   final List<GlobalKey<NavigatorState>> _navigatorKeys =
   List.generate(4, (_) => GlobalKey<NavigatorState>());
@@ -41,26 +43,54 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void dispose() {
     _ordersSubscription?.cancel();
-    _authSubscription?.cancel();
+    if (_authListener != null) {
+      authState.removeListener(_authListener!);
+    }
     super.dispose();
   }
 
   void _initAuthListener() {
-    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
-      if (user != null) {
-        _startListeningToOrders(user.uid);
+    _authListener = () {
+      if (authState.value) {
+        UserStorage.getCurrentUser().then((user) {
+          if (user != null && mounted) {
+            setState(() {
+              _currentUser = user;
+            });
+            final userId = (user is Map) ? user['id'].toString() : user.toString();
+            _startListeningToOrders(userId);
+          }
+        });
       } else {
+        setState(() {
+          _currentUser = null;
+        });
         _ordersSubscription?.cancel();
         _globalProcessedOrders.clear();
       }
-    });
+    };
+    authState.addListener(_authListener!);
   }
 
   Future<void> _restoreAuth() async {
-    final currentUser = await UserStorage.getCurrentUser();
-    if (currentUser != null) {
+    final user = await UserStorage.getCurrentUser();
+    if (mounted) {
+      setState(() {
+        _currentUser = user; // 🔹 Сразу сохраняем пользователя
+        _isAuthRestored = true; // 🔹 Отмечаем, что проверка завершена
+      });
+    }
+
+    if (user != null) {
       authState.login();
-      if (mounted) setState(() {});
+      final userId = (user is Map) ? user['id'].toString() : user.toString();
+      _startListeningToOrders(userId);
+    } else {
+      if (mounted) {
+        setState(() {
+          _isAuthRestored = true; // Даже если не залогинен, снимаем лоадер
+        });
+      }
     }
   }
 
@@ -75,65 +105,30 @@ class _MainScreenState extends State<MainScreen> {
     return ValueListenableBuilder<bool>(
       valueListenable: authState,
       builder: (context, isLoggedIn, _) {
-        final user = FirebaseAuth.instance.currentUser;
-        if (!isLoggedIn || user == null) return const ProfileScreen();
-        return OrdersScreen(userId: user.uid);
+        if (!isLoggedIn) return const ProfileScreen();
+
+        return FutureBuilder<Map<String, dynamic>?>(
+          future: UserStorage.getCurrentUser(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final user = snapshot.data;
+            if (user == null || user['id'] == null) {
+              return const ProfileScreen();
+            }
+
+            final userId = user['id'].toString();
+            return OrdersScreen(userId: userId);
+          },
+        );
       },
     );
   }
 
   void _startListeningToOrders(String userId) {
     _ordersSubscription?.cancel();
-    _ordersSubscription = FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('orders')
-        .snapshots()
-        .listen((snapshot) {
-      for (var change in snapshot.docChanges) {
-        final data = change.doc.data() as Map<String, dynamic>;
-        final orderId = change.doc.id;
-        final status = (data['status'] ?? '').toString();
-        Timestamp? timestamp = data['createdAt'] as Timestamp?;
-
-        // ИЗМЕНЕНИЕ: Если статус требует действия, мы не должны его пропускать,
-        // даже если заказ был создан до запуска приложения!
-        if (change.type == DocumentChangeType.added &&
-            status != 'action_required') {
-          if (timestamp != null) {
-            DateTime orderTime = timestamp.toDate();
-            if (_appStartTime != null && orderTime.isBefore(_appStartTime!)) {
-              _globalProcessedOrders[orderId] = status;
-              continue;
-            }
-          } else {
-            continue;
-          }
-        }
-
-        if (_globalProcessedOrders[orderId] == status) continue;
-
-        if (change.type == DocumentChangeType.modified ||
-            change.type == DocumentChangeType.added) {
-          _globalProcessedOrders[orderId] = status;
-
-          // Триггерим уведомление (можно оставить или убрать, если шторки достаточно)
-          if (status != 'action_required') {
-            _triggerNotification(status);
-          }
-
-          // Показ шторки замены
-          if (status == 'action_required' && !_isDialogShowing) {
-            _isDialogShowing = true;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                _showReplacementBottomSheet(change.doc);
-              }
-            });
-          }
-        }
-      }
-    });
   }
 
   void _triggerNotification(String status) {
@@ -157,7 +152,6 @@ class _MainScreenState extends State<MainScreen> {
           notifications[status]![0], notifications[status]![1]);
     }
   }
-
 
   /// Карточка отображения конкретной замены (с поддержкой размеров, модификаторов и количества)
   Widget _buildItemReplacementCard({
@@ -399,8 +393,8 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   /// Крупный выезжающий снизу блок предложения замены товара
-  void _showReplacementBottomSheet(DocumentSnapshot orderDoc) {
-    final data = orderDoc.data() as Map<String, dynamic>? ?? {};
+  void _showReplacementBottomSheet(Map<String, dynamic> orderData) {
+    final data = orderData;
 
     // Парсим данные замены из различных вариантов структуры в БД
     List<Map<String, dynamic>> replacementItems = [];
@@ -522,11 +516,8 @@ class _MainScreenState extends State<MainScreen> {
                           ),
                           onPressed: () async {
                             Navigator.pop(sheetContext);
-                            await orderDoc.reference.update({
-                              'status': 'cancelled',
-                              'cancelReason': 'Отказ от замены',
-                              'updatedAt': FieldValue.serverTimestamp(),
-                            });
+                            // ЗАМЕНА FIREBASE: Вызов API для обновления статуса заказа на отмененный
+                            // Например: await ApiService.updateOrder(data['id'], {'status': 'cancelled', 'cancelReason': 'Отказ от замены'});
                           },
                           child: const Text(
                             'Отменить заказ',
@@ -566,7 +557,7 @@ class _MainScreenState extends State<MainScreen> {
                                 final int oldQtyToRemove = (replacement['oldQuantity'] ??
                                     1) as int;
 
-                                // Пытаемся обработать по точечному индексу из Firestore
+                                // Пытаемся обработать по точечному индексу
                                 if (targetIndex != null && targetIndex >= 0 &&
                                     targetIndex < currentItems.length) {
                                   int currentQty = (currentItems[targetIndex]['quantity'] ??
@@ -646,7 +637,7 @@ class _MainScreenState extends State<MainScreen> {
                               }
                             }
 
-                            // 3. Фаза 2: Безопасно чистим полностью замененные позиций и добавляем новые
+                            // 3. Фаза 2: Безопасно чистим полностью замененные позиции и добавляем новые
                             currentItems.removeWhere((
                                 item) => item['_toRemove'] == true);
                             currentItems.addAll(itemsToAdd);
@@ -663,16 +654,15 @@ class _MainScreenState extends State<MainScreen> {
                                 data['deliveryCost'] ?? 0) as num;
                             final newTotal = newItemsPrice + deliveryPrice;
 
-                            // 5. Обновляем документ в Firestore
-                            await orderDoc.reference.update({
-                              'status': 'zamena',
-                              'replacementAccepted': true,
-                              'items': currentItems,
-                              'itemsPrice': newItemsPrice,
-                              'totalPrice': newTotal,
-                              'total': newTotal,
-                              'updatedAt': FieldValue.serverTimestamp(),
-                            });
+                            // 5. ЗАМЕНА FIREBASE: Отправка обновленных данных заказа на ваш бэкенд
+                            // Например: await ApiService.updateOrder(data['id'], {
+                            //   'status': 'zamena',
+                            //   'replacementAccepted': true,
+                            //   'items': currentItems,
+                            //   'itemsPrice': newItemsPrice,
+                            //   'totalPrice': newTotal,
+                            //   'total': newTotal,
+                            // });
                           },
                           child: const Text(
                             'Принять замену',
@@ -693,10 +683,25 @@ class _MainScreenState extends State<MainScreen> {
       _isDialogShowing = false;
     });
   }
-
-
   @override
   Widget build(BuildContext context) {
+    // 🔹 Если авторизация ещё восстанавливается из SharedPreferences — показываем загрузку
+    if (!_isAuthRestored) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(color: Colors.deepOrange),
+        ),
+      );
+    }
+
+    // 🔹 Берем актуального пользователя из стейта
+    final currentUser = _currentUser;
+
+    // 🔹 Вытаскиваем реальный ID, если он есть, иначе гость
+    final String userId = (currentUser != null && currentUser is Map && currentUser['id'] != null)
+        ? currentUser['id'].toString()
+        : 'guest';
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
@@ -712,16 +717,33 @@ class _MainScreenState extends State<MainScreen> {
         body: IndexedStack(
           index: _currentIndex,
           children: [
-            _buildTabNavigator(0, const RestaurantsPage()),
+            // 🔹 Передаем реальный userId в RestaurantsPage
+            _buildTabNavigator(0, RestaurantsPage(userId: userId)),
+
+            // 🔹 Вкладка корзины с ValueListenableBuilder и отладочными принтами
             _buildTabNavigator(
               1,
               ValueListenableBuilder<String?>(
                 valueListenable: currentActiveShopId,
                 builder: (context, activeShopId, _) {
-                  return CartScreen(shopId: activeShopId);
+                  // Принты для отслеживания смены activeShopId
+                  print('🛒 [BUILDER DEBUG] Перестройка CartScreen');
+                  print('🛒 [BUILDER DEBUG] activeShopId: $activeShopId');
+                  print('🛒 [BUILDER DEBUG] userId: $userId');
+
+                  final String keyString = 'cart_${userId}_${activeShopId ?? 'empty'}';
+                  print('🛒 [BUILDER DEBUG] Генерируемый Key: $keyString');
+
+                  // 🔹 Передаем уникальный key, shopId и userId в CartScreen
+                  return CartScreen(
+                    key: ValueKey(keyString),
+                    shopId: activeShopId,
+                    userId: userId,
+                  );
                 },
               ),
             ),
+
             _buildTabNavigator(2, _buildOrdersTab()),
             _buildTabNavigator(3, const ProfileScreen()),
           ],
@@ -991,6 +1013,9 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 }
+
+
+
 
 class _NavBarItemData {
   final IconData activeIcon;

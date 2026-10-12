@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'categories_page.dart';
 
 class HomeScreen extends StatelessWidget {
-  // 🔹 Больше не принимаем addToCart, так как экраны сами работают с корзиной
-  const HomeScreen({super.key});
+  final String userId;
+
+  const HomeScreen({super.key, required this.userId});
 
   @override
   Widget build(BuildContext context) {
-    // 🔹 Просто вызываем CategoriesPage без параметров
-    return const RestaurantsPage();
+    return RestaurantsPage(userId: userId);
   }
 }

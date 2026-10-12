@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:convert';
+
 import 'package:latlong2/latlong.dart';
 import '../screens/Menu/Cart_data.dart';
 import 'dish_model.dart';
@@ -17,6 +17,7 @@ class Order {
   final String status;
   final String? shopId;
   final String? restaurantName;
+  final String? restaurantImage; // 🔹 Поле для картинки/логотипа ресторана
   final String type;
   final List<Map<String, dynamic>>? replacements; // 🔹 Поле для замен
 
@@ -50,6 +51,7 @@ class Order {
     this.courierId,
     this.shopId,
     this.restaurantName,
+    this.restaurantImage,
     this.startedAt,
     this.readyAt,
     this.acceptedAt,
@@ -88,6 +90,7 @@ class Order {
     'courierId': courierId,
     'shopId': shopId,
     'restaurantName': restaurantName,
+    'restaurant_image': restaurantImage,
     'startedAt': startedAt?.toIso8601String(),
     'readyAt': readyAt?.toIso8601String(),
     'acceptedAt': acceptedAt?.toIso8601String(),
@@ -96,69 +99,42 @@ class Order {
   };
 
   factory Order.fromJson(String id, Map<String, dynamic> json) {
-    return Order(
-      id: id,
-      items: (json['items'] as List? ?? []).map((e) => CartItem(
-        dish: Dish(
-          name: e['name'] ?? '',
-          price: (e['price'] as num?)?.toDouble() ?? 0.0,
-          description: e['description'] ?? '',
-          category: e['category'] ?? '',
-          imagePath: e['imagePath'] ?? '',
-          weight: e['weight']?.toString() ?? '0',
-          sizes: (e['sizes'] as List<dynamic>?)
-              ?.map((s) => DishSize.fromJson(s as Map<String, dynamic>))
-              .toList() ?? [],
-          modifiers: (e['modifiers'] as List<dynamic>?)
-              ?.map((m) => DishModifier.fromJson(m as Map<String, dynamic>))
-              .toList() ?? [],
-        ),
-        quantity: e['quantity'] ?? 1,
-        shopId: e['shopId'] ?? 'default',
-      )).toList(),
-      deliveryLocation: LatLng(
-        (json['deliveryLocation']?['lat'] as num? ?? 0.0).toDouble(),
-        (json['deliveryLocation']?['lng'] as num? ?? 0.0).toDouble(),
-      ),
-      comment: json['comment'] ?? '',
-      paymentMethod: json['paymentMethod'] ?? 'online',
-      total: ((json['total'] ?? json['totalPrice'] ?? 0.0) as num).toDouble(),
-      itemsPrice: ((json['itemsPrice'] ?? 0.0) as num).toDouble(),
-      deliveryPrice: ((json['deliveryPrice'] ?? 0.0) as num).toDouble(),
-      dateTime: json['dateTime'] != null ? DateTime.parse(json['dateTime']) : DateTime.now(),
-      status: json['status'] ?? 'preparing',
-      type: json['category'] ?? 'restaurant',
-      replacements: json['replacements'] != null
-          ? List<Map<String, dynamic>>.from(json['replacements'])
-          : null,
-      courierId: json['courierId'],
-      shopId: json['shopId'],
-      restaurantName: json['restaurantName'],
-      startedAt: json['startedAt'] != null ? DateTime.parse(json['startedAt']) : null,
-      readyAt: json['readyAt'] != null ? DateTime.parse(json['readyAt']) : null,
-      acceptedAt: json['acceptedAt'] != null ? DateTime.parse(json['acceptedAt']) : null,
-      inProgressAt: json['inProgressAt'] != null ? DateTime.parse(json['inProgressAt']) : null,
-      deliveredAt: json['deliveredAt'] != null ? DateTime.parse(json['deliveredAt']) : null,
-    );
-  }
+    // Вспомогательная функция для безопасного парсинга чисел
+    double parseNum(dynamic value) {
+      if (value == null) return 0.0;
+      if (value is num) return value.toDouble();
+      return double.tryParse(value.toString()) ?? 0.0;
+    }
 
-  factory Order.fromFirestore(String id, Map<String, dynamic> data) {
-    DateTime date = (data['createdAt'] as Timestamp?)?.toDate() ??
-        (data['dateTime'] is String ? DateTime.parse(data['dateTime']) : DateTime.now());
+    int parseInt(dynamic value) {
+      if (value == null) return 0;
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse(value.toString()) ?? 0;
+    }
 
-    DateTime? _parseTimestamp(String key) {
-      var val = data[key];
-      if (val is Timestamp) return val.toDate();
-      if (val is String) return DateTime.tryParse(val.toString());
-      return null;
+    // Безопасное извлечение и декодирование списка товаров (items)
+    List<dynamic> itemsList = [];
+    var rawItems = json['replacements'];
+    print('DEBUG: Поле replacements имеет тип: ${rawItems.runtimeType}');
+    print('DEBUG: Содержимое items: $rawItems');
+    if (rawItems is String) {
+      try {
+        String cleanString = rawItems.replaceAll('""', '"');
+        itemsList = jsonDecode(cleanString) as List? ?? [];
+      } catch (_) {
+        itemsList = [];
+      }
+    } else if (rawItems is List) {
+      itemsList = rawItems;
     }
 
     return Order(
-      id: id,
-      items: (data['items'] as List<dynamic>? ?? []).map((e) => CartItem(
+      id: id.isNotEmpty ? id : (json['id']?.toString() ?? ''),
+      items: itemsList.map((e) => CartItem(
         dish: Dish(
-          name: e['name'] ?? e['dish'] ?? 'Без имени',
-          price: (e['price'] as num?)?.toDouble() ?? 0.0,
+          name: e['name'] ?? '',
+          price: parseNum(e['price']),
           description: e['description'] ?? '',
           category: e['category'] ?? '',
           imagePath: e['imagePath'] ?? e['imageUrl'] ?? '',
@@ -170,32 +146,36 @@ class Order {
               ?.map((m) => DishModifier.fromJson(m as Map<String, dynamic>))
               .toList() ?? [],
         ),
-        quantity: e['quantity'] ?? 1,
-        shopId: e['shopId'] ?? 'default',
+        quantity: parseInt(e['quantity'] ?? 1),
+        shopId: e['shopId']?.toString() ?? 'default',
       )).toList(),
       deliveryLocation: LatLng(
-        (data['deliveryLocation']?['lat'] ?? 0).toDouble(),
-        (data['deliveryLocation']?['lng'] ?? 0).toDouble(),
+        parseNum(json['client_lat'] ?? json['deliveryLocation']?['lat']),
+        parseNum(json['client_lng'] ?? json['deliveryLocation']?['lng']),
       ),
-      comment: data['comment'] ?? '',
-      paymentMethod: data['paymentMethod'] ?? 'online',
-      total: ((data['total'] ?? data['totalPrice'] ?? 0.0) as num).toDouble(),
-      itemsPrice: ((data['itemsPrice'] ?? 0.0) as num).toDouble(),
-      deliveryPrice: ((data['deliveryPrice'] ?? 0.0) as num).toDouble(),
-      dateTime: date,
-      status: data['status'] ?? 'preparing',
-      type: data['category'] ?? 'restaurant',
-      replacements: data['replacements'] != null
-          ? List<Map<String, dynamic>>.from(data['replacements'])
+      comment: json['comment'] ?? '',
+      paymentMethod: json['payment_method'] ?? json['paymentMethod'] ?? 'online',
+      total: parseNum(json['total_price'] ?? json['total'] ?? json['totalPrice']),
+      itemsPrice: parseNum(json['items_price'] ?? json['itemsPrice']),
+      deliveryPrice: parseNum(json['delivery_price'] ?? json['deliveryPrice']),
+      dateTime: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : (json['dateTime'] != null ? DateTime.parse(json['dateTime']) : DateTime.now()),
+      status: json['status'] ?? 'preparing',
+      type: json['type'] ?? json['category'] ?? 'restaurant',
+      replacements: json['replacements'] is List
+          ? List<Map<String, dynamic>>.from(json['replacements'])
           : null,
-      courierId: data['courierId'],
-      shopId: data['shopId'],
-      restaurantName: data['restaurantName'],
-      readyAt: _parseTimestamp('readyAt'),
-      startedAt: _parseTimestamp('startedAt'),
-      acceptedAt: _parseTimestamp('acceptedAt'),
-      inProgressAt: _parseTimestamp('inProgressAt'),
-      deliveredAt: _parseTimestamp('deliveredAt'),
+      courierId: json['courier_id']?.toString() ?? json['courierId'],
+      shopId: json['shop_id']?.toString() ?? json['shopId'],
+      restaurantName: json['restaurant_name'] ?? json['restaurantName'],
+      restaurantImage: json['restaurant_image'] ?? json['restaurantImage'],
+      startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']) : null,
+      readyAt: json['ready_at'] != null ? DateTime.parse(json['ready_at']) : null,
+      acceptedAt: json['accepted_at'] != null ? DateTime.parse(json['accepted_at']) : null,
+      inProgressAt: json['in_progress_at'] != null ? DateTime.parse(json['in_progress_at']) : null,
+      deliveredAt: json['delivered_at'] != null ? DateTime.parse(json['delivered_at']) : null,
     );
   }
+
 }

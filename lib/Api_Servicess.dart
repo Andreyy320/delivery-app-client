@@ -271,4 +271,14 @@ debugPrint('💥 [API PARSE ERROR] Failed to decode JSON: $e');
 
 return null;
  }
+
+
+  /// Получение списка дополнительных услуг/опций (/v1/getCarServices)
+  static Future<List<Map<String, dynamic>>> getCarServices() async {
+    final res = await _post('/v1/getCarServices', {});
+    if (res != null && res.statusCode == 200) {
+      return List<Map<String, dynamic>>.from(jsonDecode(res.body));
+    }
+    return [];
+  }
  }

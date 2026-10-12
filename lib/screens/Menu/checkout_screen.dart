@@ -2,10 +2,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:latlong2/latlong.dart' hide Path; // 👈 Скрыли Path, чтобы не было конфликта
-import '../../Api_Servicess.dart'; // Сервисный класс с API
+import 'package:latlong2/latlong.dart' hide Path;
+import '../../Api_Servicess.dart';
+import '../../NEW_MODELS/User_Storage.dart';
 import '../../models/Search_Address.dart';
 import '../../models/order_model.dart';
+import '../categories_page.dart';
+import '../main_screen.dart';
 import 'Cart_data.dart';
 
 // ============================================================================
@@ -15,13 +18,13 @@ class CheckoutScreen extends StatefulWidget {
   final String shopId;
   final Function(Order)? onOrderPlaced;
   final String restaurantName;
-  final String apiToken; // Токен для запросов к api.99993.ru
-  final int groupId; // ID службы/груп группы доставки
+  final String apiToken;
+  final int groupId;
   final double productsTotal;
   final List<CartItem> cartItems;
-  // 🔹 КООРДИНАТЫ РЕСТОРАНА (поддерживаются как double 46.83, так и микроградусы int 46838444)
   final double restaurantLat;
   final double restaurantLng;
+  final String? restaurantImageUrl; // <--- ДОБАВЬТЕ ЭТУ СТРОКУ
 
   const CheckoutScreen({
     super.key,
@@ -34,6 +37,7 @@ class CheckoutScreen extends StatefulWidget {
     required this.restaurantLat,
     required this.restaurantLng,
     this.groupId = 1,
+    this.restaurantImageUrl, // <--- ДОБАВЬТЕ В КОНСТРУКТОР
   });
 
   @override
@@ -57,7 +61,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   // --- СОСТОЯНИЕ GPS И ОПРЕДЕЛЕНИЯ ГЕОПОЗИЦИИ ---
   bool _isGettingLocation = false;
 
-  // --- ПОЗИЦИЯ МЕТКИ РЕСТОРАНА ДЛЯ КАРТЫ (стандартные double) ---
+  // --- ПОЗИЦИЯ МЕТКИ РЕСТОРАНА ДЛЯ КАРТЫ ---
   late LatLng _restaurantMapLatLng;
 
   // --- СОСТОЯНИЕ АДРЕСА ДОСТАВКИ ИЗ МЕТКИ НА КАРТЕ ---
@@ -82,7 +86,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   // 🔹 --- ПОЛЕ ДЛЯ КОММЕНТАРИЯ К ЗАВЕДЕНИЮ ---
   final TextEditingController _commentController = TextEditingController();
 
-  // 🔹 --- ВАРИАНТЫ И ВЫБРАННЫЙ СПОСОБ ОПЛАТЫ ---
+  // 🔹 --- СПИСОК УСЛУГ ИЗ API И ВЫБРАННАЯ УСЛУГА ---
+  List<Map<String, dynamic>> _carServices = [];
+  bool _isLoadingServices = true;
+  Map<String, dynamic>? _selectedService;
+
+  // 🔹 --- ПОЛЕ ДЛЯ ТЕЛЕФОНА ---
+  final TextEditingController _phoneController = TextEditingController();
+
+  // 🔹 --- ВАРИАНТЫ ОПЛАТЫ ---
   final List<Map<String, dynamic>> paymentOptions = [
     {'id': 'online', 'label': 'Онлайн', 'icon': Icons.payment_rounded},
     {'id': 'cash', 'label': 'Наличными', 'icon': Icons.payments_outlined},
@@ -96,7 +108,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void initState() {
     super.initState();
 
-    // Преобразуем координаты ресторана для отображения маркерного знака на карте
     final double mapLat = widget.restaurantLat.abs() > 90
         ? widget.restaurantLat / 1000000.0
         : widget.restaurantLat;
@@ -108,13 +119,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
     debugPrint('=====================================================');
     debugPrint('🚀 [DEBUG CHECKOUT] Старт экрана оформления');
-    debugPrint('📍 Сырые координаты ресторана из параметров: lat=${widget
-        .restaurantLat}, lng=${widget.restaurantLng}');
-    debugPrint('📍 Координаты ресторана для карты: $_restaurantMapLatLng');
+    debugPrint('📍 Координаты ресторана: $_restaurantMapLatLng');
     debugPrint('=====================================================');
 
-    // ⚡ БЫСТРЫЙ ПАРАЛЛЕЛЬНЫЙ СТАРТ ИНИЦИАЛИЗАЦИИ
     _fastInitScreen();
+    _fetchCarServices();
   }
 
   // --- ОСВОБОЖДЕНИЕ РЕСУРСОВ ---
@@ -126,12 +135,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _apartmentController.dispose();
     _intercomController.dispose();
     _commentController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
-  // ============================================================================
-  // ⚡ УСКОРЕННАЯ ИНИЦИАЛИЗАЦИЯ (Параллельные запросы + Fast GPS)
-  // ============================================================================
   Future<void> _fastInitScreen() async {
     await Future.wait([
       _initRestaurantAddressOnly(),
@@ -142,12 +149,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _fetchAddressFromCoordinates(_currentCenter);
     }
   }
-
-
-
-
-
-
 
   double _calculateDeliveryPrice() {
     double taximeterPrice = 0.0;
@@ -174,21 +175,55 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       deliveryPrice += (totalItemsCount - 3) * 5.0;
     }
 
-    if (_apartmentController.text.trim().isNotEmpty) {
-      deliveryPrice += 5.0;
+    // 🔹 Добавляем 5 рублей, если выбрана услуга доставки до квартиры (ID 11)
+    if (_selectedService != null) {
+      final serviceId = _selectedService!['id'] is int
+          ? _selectedService!['id']
+          : int.tryParse(_selectedService!['id'].toString());
+      if (serviceId == 11) {
+        deliveryPrice += 5.0;
+      }
     }
 
     return deliveryPrice;
   }
 
+  Future<void> _fetchCarServices() async {
+    try {
+      final services = await AddressApiService.getCarServices();
+      if (mounted) {
+        final filtered = services.where((service) {
+          final id = service['id'] is int ? service['id'] : int.tryParse(service['id'].toString());
+          return id == 11 || id == 10;
+        }).toList();
 
+        setState(() {
+          _carServices = [
+            {"id": null, "name": "Не выбрано"},
+            ...filtered.isNotEmpty ? filtered : [
+              {"id": 10, "name": "Доставка (до подъезда)"},
+              {"id": 11, "name": "Доставка (до квартиры)"}
+            ]
+          ];
+          _isLoadingServices = false;
+          _selectedService = _carServices.first;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _carServices = [
+            {"id": null, "name": "Не выбрано"},
+            {"id": 10, "name": "Доставка (до подъезда)"},
+            {"id": 11, "name": "Доставка (до квартиры)"}
+          ];
+          _selectedService = _carServices.first;
+          _isLoadingServices = false;
+        });
+      }
+    }
+  }
 
-
-
-
-  // ============================================================================
-  // ЛОГИКА БЫСТРОГО ОПРЕДЕЛЕНИЯ GPS (Работает со спутниками телефона, не по IP!)
-  // ============================================================================
   Future<void> _determineFastPosition() async {
     setState(() => _isGettingLocation = true);
 
@@ -203,7 +238,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       }
       if (permission == LocationPermission.deniedForever) return;
 
-      // 1. Сначала пробуем взять кэш (последнюю известную позицию) для мгновенного отклика
       final Position? lastKnown = await Geolocator.getLastKnownPosition();
       if (lastKnown != null && mounted) {
         final LatLng cachedLatLng = LatLng(lastKnown.latitude, lastKnown.longitude);
@@ -215,7 +249,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         _fetchAddressFromCoordinates(cachedLatLng);
       }
 
-      // 2. Параллельно запрашиваем точные свежие координаты со спутников (GPS / ГЛОНАСС)
       final Position freshPosition = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.medium,
         timeLimit: const Duration(seconds: 4),
@@ -226,11 +259,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (mounted) {
         setState(() {
           _currentCenter = freshLatLng;
-          _selectedAddressData = null; // Сбрасываем ручной ввод
+          _selectedAddressData = null;
         });
         _mapController.move(freshLatLng, 16.5);
 
-        // ⚡ ЭТО ОБЯЗАТЕЛЬНО: отправляем свежий GPS на бэкенд, чтобы получить ID адреса и нарисовать маршрут!
         await _fetchAddressFromCoordinates(freshLatLng);
       }
     } catch (e) {
@@ -242,9 +274,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
-  // ============================================================================
-  // ТОЛЬКО ОПРЕДЕЛЕНИЕ ADDRESS_ID РЕСТОРАНА
-  // ============================================================================
   Future<void> _initRestaurantAddressOnly() async {
     setState(() => _isLocatingRestaurant = true);
 
@@ -277,9 +306,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
-  // ============================================================================
-  // ЛОГИКА ОБРАБОТКИ ДВИЖЕНИЯ КАРТЫ И ТАЙМЕРА (ДЕБАУНС)
-  // ============================================================================
   void _onMapPositionChanged(LatLng center, bool hasGesture) {
     if (!hasGesture) return;
 
@@ -297,9 +323,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     });
   }
 
-  // ============================================================================
-  // СЕТЕВОЙ ЗАПРОС К API ДЛЯ ОПРЕДЕЛЕНИЯ АДРЕСА ПО КООРДИНАТАМ КАРТЫ
-  // ============================================================================
   Future<void> _fetchAddressFromCoordinates(LatLng latLng) async {
     try {
       final int mapLatInt = (latLng.latitude * 1000000).round();
@@ -337,9 +360,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
-  // ============================================================================
-  // СЕТЕВОЙ ЗАПРОС РАСЧЕТА МАРШРУТА (/v1/getRoute)
-  // ============================================================================
   Future<void> _calculateRoute(int destinationAddressId) async {
     if (_restaurantAddressId == null) return;
 
@@ -379,21 +399,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
-  // ============================================================================
-  // ДЕКОДЕР СТРОКИ GEOMETRY (Encoded Polyline)
-  // ============================================================================
   List<LatLng> _decodePolyline(String encoded) {
     List<LatLng> points = [];
-    int index = 0,
-        len = encoded.length;
-    int lat = 0,
-        lng = 0;
+    int index = 0, len = encoded.length;
+    int lat = 0, lng = 0;
 
     try {
       while (index < len) {
-        int b,
-            shift = 0,
-            result = 0;
+        int b, shift = 0, result = 0;
         do {
           b = encoded.codeUnitAt(index++) - 63;
           result |= (b & 0x1f) << shift;
@@ -430,9 +443,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return points;
   }
 
-  // ============================================================================
-  // ВСПОМОГАТЕЛЬНЫЙ МЕТОД ФОРМАТИРОВАНИЯ СТРОКИ АДРЕСА
-  // ============================================================================
   String _formatAddressText(Map<String, dynamic>? addressData) {
     if (addressData == null) return '';
 
@@ -449,19 +459,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return name.isNotEmpty ? name : town;
   }
 
-  // ============================================================================
-  // ПЕРЕХОД И ОБРАБОТКА ВОЗВРАТА С ЭКРАНА РУЧНОГО ПОИСКА
-  // ============================================================================
   Future<void> _openSearchAddressScreen() async {
     final result = await Navigator.push<Map<String, dynamic>>(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            SearchAddressScreen(
-              shopId: widget.shopId,
-              onOrderPlaced: widget.onOrderPlaced,
-              restaurantName: widget.restaurantName,
-            ),
+        builder: (context) => SearchAddressScreen(
+          shopId: widget.shopId,
+          onOrderPlaced: widget.onOrderPlaced,
+          restaurantName: widget.restaurantName,
+        ),
       ),
     );
 
@@ -493,9 +499,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
-// ============================================================================
-// ПОСТРОЕНИЕ ПОЛЬЗОВАТЕЛЬСКОГО ИНТЕРФЕЙСА (UI) — ФИКСИРОВАННАЯ КАРТА + ШТОРКА
-// ============================================================================
   @override
   Widget build(BuildContext context) {
     final activeAddress = _selectedAddressData ?? _mapAddressData;
@@ -507,7 +510,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         ? 'Определяем адрес...'
         : 'Переместите карту для выбора');
 
-    const double sheetHeight = 0.45; // Высота шторки в процентах от экрана
+    const double sheetHeight = 0.48;
+
+    // Определяем ID выбранной услуги
+    final serviceId = _selectedService != null && _selectedService!['id'] != null
+        ? (_selectedService!['id'] is int ? _selectedService!['id'] : int.tryParse(_selectedService!['id'].toString()))
+        : null;
+
+    final bool showAddressDetails = serviceId != null;
+    // Выбрана именно квартира (ID 11) или подъезд (ID 10)
+    final bool isApartmentDelivery = serviceId == 11;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F5F7),
@@ -531,16 +543,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       body: Stack(
         children: [
 // ------------------------------------------------------------------
-// 1. БЛОК ИНТЕРАКТИВНОЙ КАРТЫ (ОГРАНИЧЕН ВИДИМОЙ ОБЛАСТЬЮ НАД ШТОРКОЙ)
+// 1. БЛОК ИНТЕРАКТИВНОЙ КАРТЫ
 // ------------------------------------------------------------------
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            bottom: MediaQuery
-                .of(context)
-                .size
-                .height * sheetHeight,
+            bottom: MediaQuery.of(context).size.height * sheetHeight,
             child: FlutterMap(
               mapController: _mapController,
               options: MapOptions(
@@ -558,7 +567,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   userAgentPackageName: 'com.example.app',
                 ),
 
-// 🔹 МЕТКА САМОГО РЕСТОРАНА НА КАРТЕ
                 MarkerLayer(
                   markers: [
                     Marker(
@@ -585,7 +593,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ],
                 ),
 
-// 🔹 ОТРЕСОВКА СИНЕЙ ЛИНИИ МАРШРУТА НА КАРТЕ
                 if (_routePoints.isNotEmpty)
                   PolylineLayer(
                     polylines: [
@@ -603,16 +610,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           ),
 
 // ------------------------------------------------------------------
-// СТРОГО ЦЕНТРАЛЬНЫЙ ПИН «А» (ПОВЕРХ ВСЕГО В ЦЕНТРЕ ВИДИМОЙ ЗОНЫ КАРТЫ)
+// ЦЕНТРАЛЬНЫЙ ПИН «А»
 // ------------------------------------------------------------------
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            bottom: MediaQuery
-                .of(context)
-                .size
-                .height * sheetHeight,
+            bottom: MediaQuery.of(context).size.height * sheetHeight,
             child: IgnorePointer(
               child: Center(
                 child: Column(
@@ -664,10 +668,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 // 2. КНОПКА «МОЕ МЕСТОПОЛОЖЕНИЕ» (GPS)
 // ------------------------------------------------------------------
           Positioned(
-            bottom: MediaQuery
-                .of(context)
-                .size
-                .height * sheetHeight + 16,
+            bottom: MediaQuery.of(context).size.height * sheetHeight + 16,
             right: 16,
             child: Material(
               color: Colors.white,
@@ -707,10 +708,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             right: 0,
             child: Container(
               constraints: BoxConstraints(
-                maxHeight: MediaQuery
-                    .of(context)
-                    .size
-                    .height * sheetHeight,
+                maxHeight: MediaQuery.of(context).size.height * sheetHeight,
               ),
               decoration: BoxDecoration(
                 color: const Color(0xFFF4F5F7),
@@ -732,7 +730,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-// Индикатор шторки
                         Center(
                           child: Container(
                             width: 36,
@@ -768,7 +765,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           ),
                           child: Column(
                             children: [
-// 1. Строка выбора / отображения адреса
                               InkWell(
                                 onTap: _openSearchAddressScreen,
                                 borderRadius: const BorderRadius.vertical(
@@ -800,7 +796,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                 ),
                               ),
 
-// КНОПКА «Другой способ / Указать вручную» в строгом стиле интерфейса
                               const Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6)),
                               InkWell(
                                 onTap: _openSearchAddressScreen,
@@ -827,73 +822,71 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                 ),
                               ),
 
-                              const Divider(height: 1,
-                                  thickness: 1,
-                                  color: Color(0xFFF3F4F6)),
+                              const Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6)),
 
-// 2. Строка полей ввода
+// 🔹 БЛОК ВЫБОРА УСЛУГИ (Выпадающий список открывается вниз)
                               Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 4),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _entranceController,
-                                        style: const TextStyle(fontSize: 13,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFF111111)),
-                                        decoration: const InputDecoration(
-                                          labelText: 'Подъезд',
-                                          labelStyle: TextStyle(fontSize: 12,
-                                              color: Color(0xFF9CA3AF)),
-                                          border: InputBorder.none,
-                                          isDense: true,
-                                          contentPadding: EdgeInsets.symmetric(
-                                              vertical: 10),
-                                        ),
-                                      ),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                child: _isLoadingServices
+                                    ? const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(8.0),
+                                    child: SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF111111)),
                                     ),
-                                    Container(height: 24,
-                                        width: 1,
-                                        color: const Color(0xFFF3F4F6)),
-                                    Expanded(
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(
-                                            left: 8.0),
-                                        child: TextField(
-                                          controller: _floorController,
-                                          style: const TextStyle(fontSize: 13,
-                                              fontWeight: FontWeight.w600,
-                                              color: Color(0xFF111111)),
-                                          decoration: const InputDecoration(
-                                            labelText: 'Этаж',
-                                            labelStyle: TextStyle(fontSize: 12,
-                                                color: Color(0xFF9CA3AF)),
-                                            border: InputBorder.none,
-                                            isDense: true,
-                                            contentPadding: EdgeInsets
-                                                .symmetric(vertical: 10),
-                                          ),
-                                        ),
+                                  ),
+                                )
+                                    : DropdownButtonFormField<Map<String, dynamic>>(
+                                  value: _selectedService,
+                                  isExpanded: true,
+                                  menuMaxHeight: 250,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Тип доставки',
+                                    labelStyle: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(vertical: 4),
+                                  ),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF111111),
+                                  ),
+                                  items: _carServices.map((service) {
+                                    return DropdownMenuItem<Map<String, dynamic>>(
+                                      value: service,
+                                      child: Text(
+                                        service['name']?.toString() ?? '',
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                    ),
-                                    Container(height: 24,
-                                        width: 1,
-                                        color: const Color(0xFFF3F4F6)),
-                                    Expanded(
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(left: 8.0),
+                                    );
+                                  }).toList(),
+                                  onChanged: (Map<String, dynamic>? newValue) {
+                                    setState(() {
+                                      _selectedService = newValue;
+                                    });
+                                  },
+                                ),
+                              ),
+
+// 🔹 ДИНАМИЧЕСКИЙ БЛОК ПОЛЕЙ
+                              if (showAddressDetails) ...[
+                                const Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6)),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 4),
+                                  child: isApartmentDelivery
+                                  // Если выбрана квартира (ID 11): показываем все 4 поля
+                                      ? Row(
+                                    children: [
+                                      Expanded(
                                         child: TextField(
-                                          controller: _apartmentController,
-                                          onChanged: (value) => setState(() {}), // 👈 ЭТА СТРОКА РЕШАЕТ ПРОБЛЕМУ
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFF111111),
-                                          ),
+                                          controller: _entranceController,
+                                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF111111)),
                                           decoration: const InputDecoration(
-                                            labelText: 'Кв/Офис',
+                                            labelText: 'Подъезд',
                                             labelStyle: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
                                             border: InputBorder.none,
                                             isDense: true,
@@ -901,37 +894,78 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                           ),
                                         ),
                                       ),
-                                    ),
-                                    Container(height: 24,
-                                        width: 1,
-                                        color: const Color(0xFFF3F4F6)),
-                                    Expanded(
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(
-                                            left: 8.0),
-                                        child: TextField(
-                                          controller: _intercomController,
-                                          style: const TextStyle(fontSize: 13,
-                                              fontWeight: FontWeight.w600,
-                                              color: Color(0xFF111111)),
-                                          decoration: const InputDecoration(
-                                            labelText: 'Домофон',
-                                            labelStyle: TextStyle(fontSize: 12,
-                                                color: Color(0xFF9CA3AF)),
-                                            border: InputBorder.none,
-                                            isDense: true,
-                                            contentPadding: EdgeInsets
-                                                .symmetric(vertical: 10),
+                                      Container(height: 24, width: 1, color: const Color(0xFFF3F4F6)),
+                                      Expanded(
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(left: 8.0),
+                                          child: TextField(
+                                            controller: _floorController,
+                                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF111111)),
+                                            decoration: const InputDecoration(
+                                              labelText: 'Этаж',
+                                              labelStyle: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+                                              border: InputBorder.none,
+                                              isDense: true,
+                                              contentPadding: EdgeInsets.symmetric(vertical: 10),
+                                            ),
                                           ),
                                         ),
                                       ),
+                                      Container(height: 24, width: 1, color: const Color(0xFFF3F4F6)),
+                                      Expanded(
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(left: 8.0),
+                                          child: TextField(
+                                            controller: _apartmentController,
+                                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF111111)),
+                                            decoration: const InputDecoration(
+                                              labelText: 'Кв/Офис',
+                                              labelStyle: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+                                              border: InputBorder.none,
+                                              isDense: true,
+                                              contentPadding: EdgeInsets.symmetric(vertical: 10),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      Container(height: 24, width: 1, color: const Color(0xFFF3F4F6)),
+                                      Expanded(
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(left: 8.0),
+                                          child: TextField(
+                                            controller: _intercomController,
+                                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF111111)),
+                                            decoration: const InputDecoration(
+                                              labelText: 'Домофон',
+                                              labelStyle: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+                                              border: InputBorder.none,
+                                              isDense: true,
+                                              contentPadding: EdgeInsets.symmetric(vertical: 10),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                  // Если выбран подъезд (ID 10): показываем ТОЛЬКО поле «Подъезд»
+                                      : Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                                    child: TextField(
+                                      controller: _entranceController,
+                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF111111)),
+                                      decoration: const InputDecoration(
+                                        labelText: 'Подъезд',
+                                        labelStyle: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+                                        border: InputBorder.none,
+                                        isDense: true,
+                                        contentPadding: EdgeInsets.symmetric(vertical: 10),
+                                      ),
                                     ),
-                                  ],
+                                  ),
                                 ),
-                              ),
-                              const Divider(height: 1,
-                                  thickness: 1,
-                                  color: Color(0xFFF3F4F6)),
+                              ],
+
+                              const Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6)),
 
 // 3. Комментарий
                               Padding(
@@ -1051,141 +1085,354 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 // ==========================================
 // СЕКЦИЯ РАСЧЕТА И КНОПКА
 // ==========================================
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFE5E7EB)),
-                    ),
-                    child: Column(
-                      children: [
-                        // 1. Сумма за товары
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Товары',
-                              style: TextStyle(fontSize: 13, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
-                            ),
-                            Text(
-                              '${widget.productsTotal.toInt()} руб.',
-                              style: const TextStyle(fontSize: 13, color: Color(0xFF111111), fontWeight: FontWeight.w700),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-
-                        // 2. Стоимость доставки
-                        if (_isCalculatingRoute || _isLocatingRestaurant) ...[
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 4.0),
-                            child: Row(
-                              children: [
-                                SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF111111)),
-                                ),
-                                SizedBox(width: 8),
-                                Text('Расчет доставки...', style: TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
-                              ],
-                            ),
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFE5E7EB)),
                           ),
-                        ] else ...[
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          child: Column(
                             children: [
-                              const Text(
-                                'Доставка',
-                                style: TextStyle(fontSize: 13, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Товары',
+                                    style: TextStyle(fontSize: 13, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+                                  ),
+                                  Text(
+                                    '${widget.productsTotal.toInt()} руб.',
+                                    style: const TextStyle(fontSize: 13, color: Color(0xFF111111), fontWeight: FontWeight.w700),
+                                  ),
+                                ],
                               ),
-                              Text(
-                                '${_calculateDeliveryPrice().toInt()} руб.',
-                                style: const TextStyle(fontSize: 13, color: Color(0xFF111111), fontWeight: FontWeight.w700),
+                              const SizedBox(height: 6),
+
+                              if (_isCalculatingRoute || _isLocatingRestaurant) ...[
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 4.0),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF111111)),
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text('Расчет доставки...', style: TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+                                    ],
+                                  ),
+                                ),
+                              ] else ...[
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Доставка',
+                                      style: TextStyle(fontSize: 13, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+                                    ),
+                                    Text(
+                                      '${_calculateDeliveryPrice().toInt()} руб.',
+                                      style: TextStyle(fontSize: 13, color: Color(0xFF111111), fontWeight: FontWeight.w700),
+                                    ),
+                                  ],
+                                ),
+                              ],
+
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 8.0),
+                                child: Divider(height: 1, color: Color(0xFFF3F4F6)),
+                              ),
+
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Всего',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w900,
+                                      color: Color(0xFF111111),
+                                    ),
+                                  ),
+                                  Text(
+                                    '${(widget.productsTotal + _calculateDeliveryPrice()).toInt()} руб.',
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w900,
+                                      color: Color(0xFF111111),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: (_isCalculatingRoute || _isLocatingRestaurant || activeAddress == null)
+                                      ? null
+                                      : () async {
+                                    // 1. Достаем данные текущего пользователя из SharedPreferences и надежно извлекаем ID
+                                    final currentUser = await UserStorage.getCurrentUser();
+                                    print('=== [DEBUG CHECKOUT] Current User Data: $currentUser ===');
+
+                                    final dynamic rawUserId = currentUser?['id'] ?? currentUser?['user_id'] ?? currentUser?['_id'];
+                                    final int? userId = rawUserId != null ? int.tryParse(rawUserId.toString()) : null;
+
+                                    // Берем имя и телефон из профиля, если они там есть, иначе из контроллеров/дефолтные
+                                    final String clientName = currentUser?['name']?.toString().trim().isNotEmpty == true
+                                        ? currentUser!['name']
+                                        : 'Клиент';
+
+                                    final String clientPhone = _phoneController.text.trim().isNotEmpty
+                                        ? _phoneController.text.trim()
+                                        : (currentUser?['phone']?.toString() ?? '+00000000000');
+
+                                    // 2. Собираем подробный адрес
+                                    final String baseAddress = displayAddressText;
+                                    final String entrance = _entranceController.text.trim();
+                                    final String floor = _floorController.text.trim();
+                                    final String apartment = _apartmentController.text.trim();
+                                    final String intercom = _intercomController.text.trim();
+
+                                    List<String> addressParts = [baseAddress];
+                                    if (entrance.isNotEmpty) addressParts.add('под. $entrance');
+
+                                    if (isApartmentDelivery) {
+                                      if (floor.isNotEmpty) addressParts.add('эт. $floor');
+                                      if (apartment.isNotEmpty) addressParts.add('кв. $apartment');
+                                    }
+
+                                    String finalClientAddress = addressParts.join(', ');
+                                    if (isApartmentDelivery && intercom.isNotEmpty) {
+                                      finalClientAddress += ' (домофон: $intercom)';
+                                    }
+
+                                    // 3. Вычисляем координаты точки назначения (клиента)
+                                    double clientLat = 0.0;
+                                    double clientLng = 0.0;
+                                    if (activeAddress != null && activeAddress!['lat'] != null) {
+                                      double rawLat = double.tryParse(activeAddress!['lat'].toString()) ?? _currentCenter.latitude;
+                                      double rawLon = double.tryParse(activeAddress!['lon'].toString()) ?? _currentCenter.longitude;
+                                      clientLat = rawLat.abs() > 90 ? rawLat / 1000000.0 : rawLat;
+                                      clientLng = rawLon.abs() > 180 ? rawLon / 1000000.0 : rawLon;
+                                    } else {
+                                      clientLat = _currentCenter.latitude;
+                                      clientLng = _currentCenter.longitude;
+                                    }
+
+                                    // 4. Вычисляем дистанцию и время из _routeData
+                                    double distanceKm = 0.0;
+                                    int durationMin = 0;
+                                    if (_routeData != null) {
+                                      if (_routeData!['distance'] != null) {
+                                        final dist = _routeData!['distance'];
+                                        double distMeters = dist is int ? dist.toDouble() : (double.tryParse(dist.toString()) ?? 0.0);
+                                        distanceKm = distMeters > 100 ? distMeters / 1000.0 : distMeters;
+                                      }
+                                      if (_routeData!['time'] != null) {
+                                        double durSec = double.tryParse(_routeData!['time'].toString()) ?? 0.0;
+                                        durationMin = (durSec / 60).round();
+                                      }
+                                    }
+
+                                    // 5. Подготавливаем массив товаров
+                                    final List<Map<String, dynamic>> itemsJson = widget.cartItems.map((item) {
+                                      final String resolvedDishId = (item.dish.id != null && item.dish.id.toString().isNotEmpty)
+                                          ? item.dish.id.toString()
+                                          : item.id.toString();
+
+                                      return {
+                                        'dish_id': resolvedDishId,
+                                        'name': item.dish.name,
+                                        'price': item.itemTotalWithModifiers / item.quantity,
+                                        'quantity': item.quantity,
+                                        'size': item.selectedSize,
+                                        'modifiers': item.selectedModifiers,
+                                        'imagePath': item.dish.imagePath,
+                                      };
+                                    }).toList();
+
+                                    // 6. Формируем итоговый payload
+                                    final Map<String, dynamic> newOrderPayload = {
+                                      'user_id': userId,
+                                      'shop_id': int.tryParse(widget.shopId.toString()) ?? widget.shopId,
+                                      'type': 'delivery',
+                                      'category': 'food',
+                                      'status': 'new',
+                                      'client_name': clientName,
+                                      'client_phone': clientPhone,
+                                      'client_address': finalClientAddress,
+                                      'client_lat': clientLat,
+                                      'client_lng': clientLng,
+                                      'restaurant_name': widget.restaurantName,
+                                      'restaurant_image': widget.restaurantImageUrl,
+                                      'restaurant_address': '',
+                                      'restaurant_lat': widget.restaurantLat,
+                                      'restaurant_lng': widget.restaurantLng,
+                                      'restaurant_comment': _commentController.text.trim(),
+                                      'delivery_lat': clientLat,
+                                      'delivery_lng': clientLng,
+                                      'delivery_price': _calculateDeliveryPrice(),
+                                      'distance_km': distanceKm,
+                                      'duration_min': durationMin,
+                                      'items_price': widget.productsTotal,
+                                      'total_price': widget.productsTotal + _calculateDeliveryPrice(),
+                                      'payment_method': _selectedPaymentMethod,
+                                      'comment': 'Подъезд: $entrance, Этаж: $floor, Кв: $apartment, Домофон: $intercom. ${_commentController.text.trim()}',
+                                      'replacements': itemsJson,
+                                    };
+
+// 7. Отправляем заказ через бэкенд и показываем диалог
+try {
+final success = await UserStorage.createOrder(newOrderPayload);
+
+if (success && context.mounted) {
+final String activeUserId = userId?.toString() ?? '4';
+
+// 1. Очищаем корзину конкретного магазина и ждем завершения
+await clearCart(activeUserId, widget.shopId);
+
+// 2. Перерисовываем экран оформления перед показом диалога
+setState(() {});
+
+// Показываем диалог
+if (!context.mounted) return;
+
+showDialog(
+context: context,
+barrierDismissible: false,
+builder: (BuildContext dialogContext) {
+return PopScope(
+canPop: false,
+child: AlertDialog(
+shape: RoundedRectangleBorder(
+borderRadius: BorderRadius.circular(24),
+),
+contentPadding: const EdgeInsets.all(24),
+content: Column(
+mainAxisSize: MainAxisSize.min,
+children: [
+Container(
+padding: const EdgeInsets.all(20),
+decoration: BoxDecoration(
+color: const Color(0xFF10B981).withValues(alpha: 0.1),
+shape: BoxShape.circle,
+),
+child: const Icon(
+Icons.check_circle_rounded,
+size: 56,
+color: Color(0xFF10B981),
+),
+),
+const SizedBox(height: 20),
+const Text(
+'Заказ успешно оформлен!',
+textAlign: TextAlign.center,
+style: TextStyle(
+fontSize: 20,
+fontWeight: FontWeight.w900,
+color: Color(0xFF0F172A),
+letterSpacing: -0.5,
+),
+),
+const SizedBox(height: 10),
+const Text(
+'Ваш заказ принят в обработку. Скоро с вами свяжутся или начнут готовить.',
+textAlign: TextAlign.center,
+style: TextStyle(
+fontSize: 14,
+color: Color(0xFF64748B),
+fontWeight: FontWeight.w500,
+height: 1.3,
+),
+),
+const SizedBox(height: 24),
+SizedBox(
+width: double.infinity,
+height: 48,
+child: ElevatedButton(
+onPressed: () async {
+// На всякий случай очищаем еще раз при нажатии с передачей id магазина
+await clearCart(activeUserId, widget.shopId);
+
+if (!dialogContext.mounted) return;
+
+// Используем rootNavigator, чтобы гарантированно найти навигатор приложения
+Navigator.of(dialogContext, rootNavigator: true).pushAndRemoveUntil(
+MaterialPageRoute(
+builder: (context) => const MainScreen(),
+),
+(Route<dynamic> route) => false,
+);
+},
+style: ElevatedButton.styleFrom(
+backgroundColor: const Color(0xFF0F172A),
+foregroundColor: Colors.white,
+elevation: 0,
+shape: RoundedRectangleBorder(
+borderRadius: BorderRadius.circular(14),
+),
+),
+child: const Text(
+'На главную',
+style: TextStyle(
+fontSize: 15,
+fontWeight: FontWeight.w800,
+),
+),
+),
+),
+],
+),
+),
+);
+},
+);
+} else if (context.mounted) {
+ScaffoldMessenger.of(context).showSnackBar(
+const SnackBar(
+content: Text('Не удалось оформить заказ. Попробуйте еще раз.'),
+backgroundColor: Colors.red,
+),
+);
+}
+} catch (e) {
+print('Error placing order: $e');
+if (context.mounted) {
+ScaffoldMessenger.of(context).showSnackBar(
+SnackBar(
+content: Text('Ошибка: $e'),
+backgroundColor: Colors.red,
+),
+);
+}
+}},
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF111111),
+                                    disabledBackgroundColor: const Color(0xFFE5E7EB),
+                                    foregroundColor: Colors.white,
+                                    disabledForegroundColor: const Color(0xFF9CA3AF),
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Оформить заказ',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ],
                           ),
-                        ],
-
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 8.0),
-                          child: Divider(height: 1, color: Color(0xFFF3F4F6)),
                         ),
-
-                        // 3. Итого (Товары + Доставка)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Всего',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w900,
-                                color: Color(0xFF111111),
-                              ),
-                            ),
-                            Text(
-                              '${(widget.productsTotal + _calculateDeliveryPrice()).toInt()} руб.',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w900,
-                                color: Color(0xFF111111),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-
-                        // Кнопка оплаты
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: (activeAddress != null)
-                                ? () {
-                              final String baseAddress = displayAddressText;
-                              final String entrance = _entranceController.text.trim();
-                              final String floor = _floorController.text.trim();
-                              final String apartment = _apartmentController.text.trim();
-                              final String intercom = _intercomController.text.trim();
-
-                              List<String> addressParts = [baseAddress];
-                              if (entrance.isNotEmpty) addressParts.add('под. $entrance');
-                              if (floor.isNotEmpty) addressParts.add('эт. $floor');
-                              if (apartment.isNotEmpty) addressParts.add('кв. $apartment');
-
-                              String finalFullAddress = addressParts.join(', ');
-                              if (intercom.isNotEmpty) {
-                                finalFullAddress += ' (домофон: $intercom)';
-                              }
-
-                              debugPrint('📦 ФИНАЛЬНЫЙ АДРЕС ДЛЯ КУРЬЕРА: $finalFullAddress');
-                              debugPrint('💰 ИТОГОВАЯ СУММА К ОПЛАТЕ: ${widget.productsTotal + _calculateDeliveryPrice()} руб.');
-                            }
-                                : null,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF111111),
-                              disabledBackgroundColor: const Color(0xFFE5E7EB),
-                              foregroundColor: Colors.white,
-                              disabledForegroundColor: const Color(0xFF9CA3AF),
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: const Text(
-                              'Оформить заказ',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                       ],
                     ),
                   ),
@@ -1196,23 +1443,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         ],
       ),
     );
-  }}
+  }
+}
 
-
-
-
-
-
-// =================================================0===========================
-// ВСПОМОГАТЕЛЬНЫЙ КЛИППЕР ДЛЯ ОРИГИНАЛЬНОГО УКАЗАТЕЛЯ ПИНА
-// ============================================================================
+// Клиппер для хвостика маркера
 class _PinTailClipper extends CustomClipper<Path> {
   @override
   Path getClip(Size size) {
-    final path = Path();
-    path.moveTo(0, 0);
-    path.lineTo(size.width, 0);
+    var path = Path();
     path.lineTo(size.width / 2, size.height);
+    path.lineTo(size.width, 0.0);
     path.close();
     return path;
   }

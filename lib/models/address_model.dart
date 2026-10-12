@@ -1,6 +1,6 @@
 class AddressModel {
   final String id;
-  final String title; // Например: "Дом", "Работа" или просто "Ул. Пушкина 10"
+  final String title;
   final double latitude;
   final double longitude;
   final String fullAddress;
